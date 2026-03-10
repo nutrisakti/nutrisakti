@@ -1,0 +1,21 @@
+{
+  "name": "nutrisakti-healthcare-provider-portal",
+  "version": "3.0.0",
+  "description": "NutriSakti Verifiable Care Portal for Healthcare Providers",
+  "main": "index.js",
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.73.11",
+    "@react-navigation/native": "^6.1.9",
+    "@react-navigation/stack": "^6.3.20",
+    "react-native-qrcode-scanner": "^1.5.5",
+    "ethers": "^6.9.0",
+    "axios": "^1.6.0"
+  },
+  "license": "MIT"
+}

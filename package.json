@@ -1,0 +1,37 @@
+{
+  "name": "nutrisakti",
+  "version": "1.0.0",
+  "description": "Decentralized Maternal & Child Health Guardian for Eastern Indonesia",
+  "main": "index.js",
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "test": "jest",
+    "lint": "eslint .",
+    "compile-contracts": "cd blockchain && npx hardhat compile",
+    "deploy-contracts": "cd blockchain && npx hardhat run scripts/deploy.js --network polygon"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.73.0",
+    "@react-navigation/native": "^6.1.9",
+    "@react-navigation/stack": "^6.3.20",
+    "redux": "^5.0.0",
+    "react-redux": "^9.0.0",
+    "redux-persist": "^6.0.0",
+    "@nozbe/watermelondb": "^0.27.1",
+    "@react-native-camera/camera": "^4.2.0",
+    "react-native-fs": "^2.20.0",
+    "axios": "^1.6.0",
+    "ethers": "^6.9.0",
+    "@tensorflow/tfjs-react-native": "^0.8.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0"
+  },
+  "license": "MIT"
+}

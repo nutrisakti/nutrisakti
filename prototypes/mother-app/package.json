@@ -1,0 +1,40 @@
+{
+  "name": "nutrisakti-mother-app",
+  "version": "3.0.0",
+  "description": "NutriSakti Guardian Interface for Mothers",
+  "main": "index.js",
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "web": "webpack serve --mode development",
+    "build:web": "webpack --mode production",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^1.21.0",
+    "@react-navigation/bottom-tabs": "^6.5.11",
+    "@react-navigation/native": "^6.1.9",
+    "ethers": "^6.9.0",
+    "react": "18.2.0",
+    "react-dom": "^18.2.0",
+    "react-native": "0.73.11",
+    "react-native-nfc-manager": "^3.14.0",
+    "react-native-timeline-flatlist": "^0.8.0",
+    "react-native-web": "^0.21.2",
+    "react-redux": "^9.0.0",
+    "redux": "^5.0.0",
+    "redux-persist": "^6.0.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@babel/preset-react": "^7.28.5",
+    "babel-loader": "^10.0.0",
+    "html-webpack-plugin": "^5.6.6",
+    "webpack": "^5.105.4",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.3"
+  }
+}
