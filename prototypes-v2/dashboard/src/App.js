@@ -385,3 +385,81 @@ function Sessions() {
     </div>
   );
 }
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'overview',  label: '📊 Overview',        icon: '📊' },
+  { id: 'chat',      label: '🤖 Guardian Agent',   icon: '🤖' },
+  { id: 'mothers',   label: '👩 Daftar Ibu',       icon: '👩' },
+  { id: 'audit',     label: '🔍 Health Audit',     icon: '🔍' },
+  { id: 'kits',      label: '📦 Kit Requests',     icon: '📦' },
+  { id: 'sessions',  label: '📋 Agent Sessions',   icon: '📋' },
+];
+
+export default function App() {
+  const [tab, setTab] = useState('overview');
+  const [mothers, setMothers] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [selectedMother, setSelectedMother] = useState(null);
+
+  useEffect(() => {
+    api.getMothers().then(setMothers);
+    api.getAlerts().then(setAlerts);
+    const interval = setInterval(() => api.getAlerts().then(setAlerts), 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSelectMother = useCallback((m) => {
+    setSelectedMother(m);
+    setTab('audit');
+  }, []);
+
+  const tabTitle = TABS.find(t => t.id === tab)?.label || '';
+
+  return (
+    <div style={S.app}>
+      {/* Sidebar */}
+      <div style={S.sidebar}>
+        <div style={S.logo}>
+          <div style={S.logoTitle}>NutriSakti</div>
+          <div style={S.logoSub}>Multi-Agent System v2</div>
+        </div>
+        {TABS.map(t => (
+          <button key={t.id} style={S.navBtn(tab === t.id)} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+        <div style={{marginTop:'auto', padding:'16px 20px', borderTop:'1px solid #334155'}}>
+          <div style={{fontSize:11, color:'#64748b', marginBottom:4}}>MCP Tools</div>
+          {['calendar','database','blockchain','whatsapp'].map(tool => (
+            <div key={tool} style={{fontSize:11, color:'#38bdf8', padding:'2px 0'}}>🛠 {tool}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={S.main}>
+        <div style={S.topbar}>
+          <div style={S.topbarTitle}>{tabTitle}</div>
+          <div style={{display:'flex', gap:8, alignItems:'center'}}>
+            {alerts.filter(a => a.severity === 'high').length > 0 && (
+              <span style={S.badge('#dc2626')}>
+                🔴 {alerts.filter(a => a.severity === 'high').length} Alert Kritis
+              </span>
+            )}
+            <span style={S.badge('#0284c7')}>API: localhost:3001</span>
+            <span style={S.badge('#15803d')}>{mothers.length} Ibu</span>
+          </div>
+        </div>
+        <div style={S.content}>
+          {tab === 'overview'  && <Overview mothers={mothers} alerts={alerts} />}
+          {tab === 'chat'      && <AgentChat mothers={mothers} />}
+          {tab === 'mothers'   && <Mothers mothers={mothers} onSelect={handleSelectMother} />}
+          {tab === 'audit'     && <HealthAudit mothers={mothers} />}
+          {tab === 'kits'      && <KitRequests mothers={mothers} />}
+          {tab === 'sessions'  && <Sessions />}
+        </div>
+      </div>
+    </div>
+  );
+}

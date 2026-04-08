@@ -1,9 +1,8 @@
 {
-  "name": "nutrisakti-dashboard-v2",
-  "version": "2.0.0",
+  "name": "nutrisakti-v3-client",
+  "version": "3.0.0",
   "private": true,
   "dependencies": {
-    "ajv": "^8.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1"
@@ -12,14 +11,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build"
   },
-  "proxy": "http://localhost:3001",
   "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead"
-    ],
-    "development": [
-      "last 1 chrome version"
-    ]
+    "production": [">0.2%", "not dead"],
+    "development": ["last 1 chrome version"]
   }
 }
