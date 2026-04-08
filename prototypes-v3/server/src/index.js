@@ -4,10 +4,13 @@ const path = require('path');
 const apiRoutes = require('./routes/api');
 
 const app = express();
-const PORT = process.env.PORT || 8080; // Cloud Run uses 8080
+const PORT = parseInt(process.env.PORT || '8080', 10);
 
 app.use(cors());
 app.use(express.json());
+
+// Health check — Cloud Run probes this before marking healthy
+app.get('/healthz', (req, res) => res.json({ status: 'ok', port: PORT }));
 
 // API routes
 app.use('/api', apiRoutes);
@@ -21,6 +24,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`NutriSakti v3 running on port ${PORT}`);
+  console.log(`Client build: ${clientBuild}`);
   console.log(`Agents: GuardianAgent → [NutritionAgent, LogisticsAgent, HealthAuditAgent]`);
   console.log(`MCP Tools: calendar, database, blockchain, whatsapp`);
 });

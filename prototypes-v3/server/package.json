@@ -1,5 +1,5 @@
 {
-  "name": "nutrisakti-v3-server",
+  "name": "nutrisakti_v3-server",
   "version": "3.0.0",
   "main": "src/index.js",
   "scripts": {
