@@ -22,7 +22,9 @@ const { askGemini } = require('../services/geminiService');
 
 // ── Intent detection keywords ─────────────────────────────────────────────────
 const INTENTS = {
-  nutrition:   ['makan', 'makanan', 'nutrisi', 'vitamin', 'pusing', 'lemas', 'anemia', 'kelor', 'singkong', 'ubi', 'ikan'],
+  nutrition:   ['makan', 'makanan', 'nutrisi', 'vitamin', 'pusing', 'lemas', 'anemia', 'kelor', 'singkong', 'ubi', 'ikan',
+                'mual', 'morning sickness', 'nausea', 'cara mengatasi', 'tips', 'hamil', 'kehamilan', 'bayi', 'asi',
+                'menyusui', 'mpasi', 'tumbuh kembang', 'pertumbuhan', 'berat badan', 'gizi', 'protein', 'kalsium'],
   kit:         ['kit', 'paket', 'minta', 'pesan', 'prenatal', 'persalinan', 'bayi', 'nutrisi kit'],
   health:      ['bpjs', 'imunisasi', 'vaksin', 'periksa', 'kunjungan', 'milestone', 'jadwal'],
   audit:       ['audit', 'status', 'laporan', 'risiko', 'cek semua'],
@@ -211,6 +213,8 @@ const guardianAgent = {
       followUpQuestions = buildFallbackFollowUps(intents, motherData.mother);
       geminiMeta = { used: false, flagged: false, flags: [], error: geminiResult.error };
       agentLog.push({ agent: 'GuardianAgent', action: 'gemini_fallback', reason: geminiResult.error || 'no response' });
+      // Log the actual error for debugging
+      if (geminiResult.error) console.error('[GuardianAgent] Gemini error:', geminiResult.error);
     }
 
     // ── Step 5: Build rich interactive cards ─────────────────────────────────

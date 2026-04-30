@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -24,8 +25,8 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`NutriSakti v3 running on port ${PORT}`);
-  console.log(`Client build: ${clientBuild}`);
-  console.log(`Agents: GuardianAgent → [NutritionAgent, LogisticsAgent, HealthAuditAgent]`);
-  console.log(`MCP Tools: calendar, database, blockchain, whatsapp`);
+  console.log(`NutriSakti v4 running on port ${PORT}`);
+  console.log(`Gemini: ${process.env.GEMINI_API_KEY ? '✅ API key loaded' : '❌ GEMINI_API_KEY not set — responses will use fallback'}`);
+  console.log(`Agents: GuardianAgent → [NutritionAgent, LogisticsAgent, HealthAuditAgent, AppointmentAgent, ReminderAgent, ShopAgent]`);
+  console.log(`MCP Tools: calendar, database, blockchain, whatsapp, gemini`);
 });
