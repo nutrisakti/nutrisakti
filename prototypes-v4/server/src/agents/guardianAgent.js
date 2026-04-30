@@ -20,17 +20,40 @@ const shopAgent = require('./shopAgent');
 const tools = require('../tools/mcpTools');
 const { askGemini } = require('../services/geminiService');
 
-// ── Intent detection keywords ─────────────────────────────────────────────────
+// ── Intent detection ─────────────────────────────────────────────────────────
+//
+// IMPORTANT DESIGN RULE:
+//   Intents only trigger sub-agents that perform ACTIONS (log food, book doctor,
+//   request kit, etc.). General knowledge questions ("cara mengatasi mual",
+//   "apa itu MPASI", "tips kehamilan") always fall through to 'general' so
+//   Gemini answers them directly without polluting results with sub-agent noise.
+
 const INTENTS = {
-  nutrition:   ['makan', 'makanan', 'nutrisi', 'vitamin', 'pusing', 'lemas', 'anemia', 'kelor', 'singkong', 'ubi', 'ikan',
-                'mual', 'morning sickness', 'nausea', 'cara mengatasi', 'tips', 'hamil', 'kehamilan', 'bayi', 'asi',
-                'menyusui', 'mpasi', 'tumbuh kembang', 'pertumbuhan', 'berat badan', 'gizi', 'protein', 'kalsium'],
-  kit:         ['kit', 'paket', 'minta', 'pesan', 'prenatal', 'persalinan', 'bayi', 'nutrisi kit'],
-  health:      ['bpjs', 'imunisasi', 'vaksin', 'periksa', 'kunjungan', 'milestone', 'jadwal'],
-  audit:       ['audit', 'status', 'laporan', 'risiko', 'cek semua'],
-  appointment: ['dokter', 'doctor', 'darurat', 'emergency', 'sakit', 'demam', 'kejang', 'sesak', 'pendarahan', 'tidak sadar', 'bidan', 'periksa dokter', 'reservasi', 'booking', 'janji'],
-  reminder:    ['pengingat', 'reminder', 'jadwal vaksin', 'kapan vaksin', 'jadwal imunisasi', 'ingatkan', 'jadwal saya', 'vaksinasi berikutnya'],
-  shop:        ['beli', 'pesan susu', 'susu', 'popok', 'diaper', 'biskuit', 'biscuit', 'belanja', 'toko', 'shop', 'order', 'produk', 'vitamin beli', 'pampers', 'merries', 'milna'],
+  // Only when user is LOGGING food they actually ate
+  nutrition:   ['saya makan', 'tadi makan', 'sudah makan', 'habis makan', 'makan daun', 'makan ikan',
+                'makan singkong', 'makan ubi', 'makan kelor', 'makan telur', 'makan kacang',
+                'i ate', 'i had', 'just ate', 'ate moringa'],
+  // Kit request actions
+  kit:         ['minta kit', 'pesan kit', 'request kit', 'butuh kit', 'kirim kit',
+                'minta paket', 'pesan paket', 'prenatal kit', 'delivery kit', 'newborn kit'],
+  // Health record / BPJS / vaccination schedule lookup
+  health:      ['cek bpjs', 'status bpjs', 'imunisasi saya', 'vaksin saya', 'jadwal imunisasi',
+                'jadwal vaksin', 'milestone saya', 'kunjungan saya', 'check bpjs'],
+  // Full audit
+  audit:       ['audit semua', 'cek semua ibu', 'laporan risiko', 'scan semua', 'audit all'],
+  // Doctor / emergency booking
+  appointment: ['pesan dokter', 'booking dokter', 'reservasi dokter', 'janji dokter',
+                'book doctor', 'book appointment', 'need doctor', 'butuh dokter',
+                'darurat', 'emergency', 'kejang', 'tidak sadar', 'sesak napas',
+                'pendarahan', 'demam tinggi', 'tidak mau menyusu'],
+  // Vaccination reminder lookup
+  reminder:    ['pengingat vaksin', 'reminder vaksin', 'jadwal vaksinasi saya',
+                'kapan vaksin berikutnya', 'ingatkan vaksin', 'show my vaccination',
+                'tampilkan jadwal vaksinasi'],
+  // Shop / purchase
+  shop:        ['beli ', 'order ', 'pesan susu', 'pesan popok', 'pesan biskuit',
+                'beli susu', 'beli popok', 'beli diaper', 'beli biskuit',
+                'buy milk', 'buy diaper', 'buy biscuit', 'PRD0'],
 };
 
 function detectIntents(text) {
@@ -39,6 +62,7 @@ function detectIntents(text) {
   for (const [intent, keywords] of Object.entries(INTENTS)) {
     if (keywords.some(k => lower.includes(k))) detected.push(intent);
   }
+  // Everything else → general (answered by Gemini directly)
   return detected.length > 0 ? detected : ['general'];
 }
 
@@ -130,18 +154,21 @@ const guardianAgent = {
     for (const intent of intents) {
 
       if (intent === 'nutrition') {
-        const foodMatch = userInput.match(/makan\s+(\w+(?:\s+\w+)?)/i) ||
-                          userInput.match(/(daun kelor|singkong|ubi jalar|ikan teri|kacang hijau|telur)/i);
-        const foodInput = foodMatch ? foodMatch[1] : userInput;
+        // Only log food if the user mentions a specific food they ate
+        const foodMatch = userInput.match(/(?:saya makan|tadi makan|sudah makan|habis makan|i ate|i had|just ate)\s+(.+?)(?:\s+tapi|\s+dan|\s+but|$)/i) ||
+                          userInput.match(/(daun kelor|singkong|ubi jalar|ikan teri|kacang hijau|telur|moringa)/i);
+        if (foodMatch) {
+          const foodInput = foodMatch[1] || foodMatch[0];
+          agentLog.push({ agent: 'GuardianAgent', action: 'routing_to', subAgent: 'NutritionAgent' });
+          results.nutrition = await nutritionAgent.analyzeFood(motherId, foodInput.trim(), symptoms);
+          agentLog.push({ agent: 'NutritionAgent', action: 'completed', riskFlags: results.nutrition.riskFlags });
 
-        agentLog.push({ agent: 'GuardianAgent', action: 'routing_to', subAgent: 'NutritionAgent' });
-        results.nutrition = await nutritionAgent.analyzeFood(motherId, foodInput, symptoms);
-        agentLog.push({ agent: 'NutritionAgent', action: 'completed', riskFlags: results.nutrition.riskFlags });
-
-        if (symptoms.length > 0) {
-          agentLog.push({ agent: 'GuardianAgent', action: 'routing_to', subAgent: 'HealthAuditAgent', reason: 'symptoms_detected' });
-          results.healthAudit = await healthAuditAgent.auditMother(motherId);
+          if (symptoms.length > 0) {
+            agentLog.push({ agent: 'GuardianAgent', action: 'routing_to', subAgent: 'HealthAuditAgent', reason: 'symptoms_detected' });
+            results.healthAudit = await healthAuditAgent.auditMother(motherId);
+          }
         }
+        // If no specific food found, let Gemini answer the nutrition question
       }
 
       if (intent === 'kit') {
@@ -176,7 +203,6 @@ const guardianAgent = {
 
       if (intent === 'shop') {
         agentLog.push({ agent: 'GuardianAgent', action: 'routing_to', subAgent: 'ShopAgent' });
-        // Try to place an order if a product ID is mentioned, otherwise browse
         if (/PRD\d{3}/i.test(userInput)) {
           results.shop = shopAgent.placeOrder(motherId, userInput);
         } else {
