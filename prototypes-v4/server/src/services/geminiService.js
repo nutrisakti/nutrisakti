@@ -11,8 +11,12 @@
 const https = require('https');
 
 const GEMINI_API_KEY  = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL    = 'gemini-1.5-flash';
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',       // preferred — most capable
+  'gemini-2.5-flash-lite',  // fallback — lighter, higher quota
+  'gemini-flash-lite-latest', // last resort
+];
+const GEMINI_ENDPOINT_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const REQUEST_TIMEOUT = 20000;
 
 // ── System prompt ─────────────────────────────────────────────────────────────
@@ -138,33 +142,47 @@ async function askGemini({ mother, userMessage, history = [], agentResults = {} 
     : userMessage;
 
   const payload = buildPayload(SYSTEM_PROMPT, history, enrichedMessage);
-  const apiUrl  = `${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`;
 
-  try {
-    const { status, body } = await httpsPost(apiUrl, payload);
+  // Try each model in order until one succeeds
+  for (const model of GEMINI_MODELS) {
+    const apiUrl = `${GEMINI_ENDPOINT_BASE}${model}:generateContent?key=${GEMINI_API_KEY}`;
+    try {
+      const { status, body } = await httpsPost(apiUrl, payload);
 
-    if (body.promptFeedback?.blockReason) {
-      return {
-        text: 'Maaf, saya tidak dapat memproses pertanyaan tersebut. Silakan hubungi bidan atau tenaga kesehatan terdekat.',
-        followUpQuestions: ['Hubungi bidan terdekat?', 'Cek jadwal vaksinasi?'],
-        flagged: true, flags: [`blocked:${body.promptFeedback.blockReason}`], source: 'gemini',
-      };
+      // Retry-able errors — try next model
+      if (status === 503 || status === 429 || status === 404) {
+        console.warn(`[GeminiService] ${model} returned ${status}, trying next model...`);
+        continue;
+      }
+
+      if (body.promptFeedback?.blockReason) {
+        return {
+          text: 'Maaf, saya tidak dapat memproses pertanyaan tersebut. Silakan hubungi bidan atau tenaga kesehatan terdekat.',
+          followUpQuestions: ['Hubungi bidan terdekat?', 'Cek jadwal vaksinasi?'],
+          flagged: true, flags: [`blocked:${body.promptFeedback.blockReason}`], source: 'gemini',
+        };
+      }
+
+      if (status !== 200 || !body.candidates?.[0]?.content?.parts?.[0]?.text) {
+        console.warn(`[GeminiService] ${model} unexpected response ${status}:`, JSON.stringify(body.error || body).slice(0, 120));
+        continue;
+      }
+
+      const rawText = body.candidates[0].content.parts[0].text.trim();
+      const { cleanText, followUpQuestions } = parseFollowUp(rawText);
+      const { text, flagged, flags } = applySafetyFilter(cleanText);
+
+      return { text, followUpQuestions, flagged, flags, source: 'gemini', model, rawResponse: body };
+
+    } catch (err) {
+      console.warn(`[GeminiService] ${model} threw: ${err.message}`);
+      continue;
     }
-
-    if (status !== 200 || !body.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error(`Gemini API error ${status}: ${JSON.stringify(body.error || body)}`);
-    }
-
-    const rawText = body.candidates[0].content.parts[0].text.trim();
-    const { cleanText, followUpQuestions } = parseFollowUp(rawText);
-    const { text, flagged, flags } = applySafetyFilter(cleanText);
-
-    return { text, followUpQuestions, flagged, flags, source: 'gemini', rawResponse: body };
-
-  } catch (err) {
-    console.error('[GeminiService] Error:', err.message);
-    return { text: null, followUpQuestions: [], flagged: false, flags: [], source: 'fallback', error: err.message };
   }
+
+  // All models failed
+  console.error('[GeminiService] All models failed');
+  return { text: null, followUpQuestions: [], flagged: false, flags: [], source: 'fallback', error: 'All Gemini models unavailable' };
 }
 
 function buildContextBlock(mother, agentResults) {

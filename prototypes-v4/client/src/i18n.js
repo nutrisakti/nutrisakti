@@ -14,7 +14,7 @@ export const translations = {
     nav_shop:        '🛍️ Shop',
     nav_analytics:   '📈 Analytics',
     // Topbar
-    app_subtitle:    'Multi-Agent System v3',
+    app_subtitle:    'Multi-Agent System v4',
     api_label:       'API',
     // Overview
     total_mothers:   'Total Mothers',
@@ -253,7 +253,7 @@ export const translations = {
     nav_reminders:   '🔔 Pengingat',
     nav_shop:        '🛍️ Toko',
     nav_analytics:   '📈 Analitik',
-    app_subtitle:    'Sistem Multi-Agent v3',
+    app_subtitle:    'Sistem Multi-Agent v4',
     api_label:       'API',
     total_mothers:   'Total Ibu',
     registered:      'Terdaftar di sistem',

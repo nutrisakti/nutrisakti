@@ -230,7 +230,7 @@ const guardianAgent = {
     if (geminiResult.source === 'gemini' && geminiResult.text) {
       response          = geminiResult.text;
       followUpQuestions = geminiResult.followUpQuestions || [];
-      geminiMeta = { used: true, flagged: geminiResult.flagged, flags: geminiResult.flags, model: 'gemini-1.5-flash' };
+      geminiMeta = { used: true, flagged: geminiResult.flagged, flags: geminiResult.flags, model: geminiResult.model || 'gemini-2.5-flash' };
       agentLog.push({ agent: 'GuardianAgent', action: 'gemini_response_received', tool: 'gemini', flagged: geminiResult.flagged });
       appendHistory(motherId, 'user',  userInput);
       appendHistory(motherId, 'model', geminiResult.text);

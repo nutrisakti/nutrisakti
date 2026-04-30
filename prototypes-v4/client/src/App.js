@@ -66,14 +66,14 @@ const makeS = (theme, bp) => {
 
     // Badges & buttons
     riskBadge:  (r) => ({ padding:'2px 8px', borderRadius:8, fontSize:11, fontWeight:600, background: r==='high'?'#7f1d1d': r==='medium'?'#78350f':'#14532d', color: r==='high'?'#fca5a5': r==='medium'?'#fcd34d':'#86efac' }),
-    btn:        (color='#0ea5e9') => ({ background:color, color:'#fff', border:'none', padding: isMobile ? '8px 14px' : '8px 16px', borderRadius:8, cursor:'pointer', fontSize: isMobile ? 13 : 13, fontWeight:600, whiteSpace:'nowrap' }),
+    btn:        (color) => ({ background: color || theme.accent, color:'#fff', border:'none', padding: isMobile ? '8px 14px' : '8px 16px', borderRadius:8, cursor:'pointer', fontSize: isMobile ? 13 : 13, fontWeight:600, whiteSpace:'nowrap' }),
     btnSm:      (color) => ({ background: color || theme.border, color: color ? '#fff' : theme.text, border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }),
     input:      { background:theme.inputBg, border:`1px solid ${theme.border}`, color:theme.text, padding: isMobile ? '8px 12px' : '10px 14px', borderRadius:8, fontSize: isMobile ? 14 : 14, width:'100%', outline:'none', boxSizing:'border-box' },
     select:     { background:theme.inputBg, border:`1px solid ${theme.border}`, color:theme.text, padding: isMobile ? '6px 10px' : '8px 12px', borderRadius:8, fontSize:13, outline:'none' },
 
     // Chat
-    chatBubble: (isUser) => ({ alignSelf: isUser?'flex-end':'flex-start', background: isUser?'#0ea5e9':theme.surface, color:theme.text, padding:'10px 14px', borderRadius:12, maxWidth: isMobile ? '90%' : '80%', fontSize: isMobile ? 13 : 13, lineHeight:1.5, border:`1px solid ${theme.border}`, whiteSpace:'pre-wrap', wordBreak:'break-word' }),
-    agentTag:   (name) => ({ display:'inline-block', padding:'1px 6px', borderRadius:4, fontSize:10, fontWeight:700, marginRight:4, background: name==='GuardianAgent'?'#1d4ed8': name==='NutritionAgent'?'#065f46': name==='LogisticsAgent'?'#7c3aed':'#9a3412', color:'#fff' }),
+    chatBubble: (isUser) => ({ alignSelf: isUser?'flex-end':'flex-start', background: isUser ? theme.accent : theme.surface, color: isUser ? '#fff' : theme.text, padding:'10px 14px', borderRadius:12, maxWidth: isMobile ? '90%' : '80%', fontSize: isMobile ? 13 : 13, lineHeight:1.5, border:`1px solid ${theme.border}`, whiteSpace:'pre-wrap', wordBreak:'break-word' }),
+    agentTag:   (name) => ({ display:'inline-block', padding:'1px 6px', borderRadius:4, fontSize:10, fontWeight:700, marginRight:4, background: name==='GuardianAgent'?'#2e7d32': name==='NutritionAgent'?'#1b5e20': name==='LogisticsAgent'?'#4a148c': name==='AppointmentAgent'?'#b71c1c': name==='ReminderAgent'?'#e65100': name==='ShopAgent'?'#006064':'#37474f', color:'#fff' }),
     tag:        (color) => ({ display:'inline-block', padding:'2px 8px', borderRadius:6, fontSize:11, background: color || theme.border, color:'#e2e8f0', marginRight:4 }),
 
     // Filter bar
