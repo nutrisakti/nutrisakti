@@ -186,9 +186,9 @@ const guardianAgent = {
 
     // ── Step 4: Compose response (Gemini-first, rule-based fallback) ──────────
     let response;
+    let followUpQuestions = [];
     let geminiMeta = { used: false, flagged: false, flags: [] };
 
-    // Always try Gemini — it enriches even structured intents with a natural reply
     agentLog.push({ agent: 'GuardianAgent', action: 'calling_gemini', tool: 'gemini' });
 
     const history = getHistory(motherId);
@@ -200,190 +200,207 @@ const guardianAgent = {
     });
 
     if (geminiResult.source === 'gemini' && geminiResult.text) {
-      // Gemini answered successfully
-      response = buildHybridResponse(results, geminiResult.text);
-      geminiMeta = {
-        used:    true,
-        flagged: geminiResult.flagged,
-        flags:   geminiResult.flags,
-        model:   'gemini-1.5-flash',
-      };
-
-      agentLog.push({
-        agent:   'GuardianAgent',
-        action:  'gemini_response_received',
-        tool:    'gemini',
-        flagged: geminiResult.flagged,
-        flags:   geminiResult.flags,
-      });
-
-      // Persist this turn in conversation history
+      response          = geminiResult.text;
+      followUpQuestions = geminiResult.followUpQuestions || [];
+      geminiMeta = { used: true, flagged: geminiResult.flagged, flags: geminiResult.flags, model: 'gemini-1.5-flash' };
+      agentLog.push({ agent: 'GuardianAgent', action: 'gemini_response_received', tool: 'gemini', flagged: geminiResult.flagged });
       appendHistory(motherId, 'user',  userInput);
       appendHistory(motherId, 'model', geminiResult.text);
-
     } else {
-      // Gemini unavailable — fall back to rule-based composer
-      response = composeResponse(userInput, intents, results, motherData.mother);
+      response = buildFallbackText(intents, results, motherData.mother);
+      followUpQuestions = buildFallbackFollowUps(intents, motherData.mother);
       geminiMeta = { used: false, flagged: false, flags: [], error: geminiResult.error };
-
-      agentLog.push({
-        agent:  'GuardianAgent',
-        action: 'gemini_fallback',
-        reason: geminiResult.error || 'no response',
-      });
+      agentLog.push({ agent: 'GuardianAgent', action: 'gemini_fallback', reason: geminiResult.error || 'no response' });
     }
 
-    // ── Step 5: Finalise ──────────────────────────────────────────────────────
+    // ── Step 5: Build rich interactive cards ─────────────────────────────────
+    const cards = buildCards(intents, results, motherData.mother);
+
+    // ── Step 6: Finalise ──────────────────────────────────────────────────────
     const duration = Date.now() - startTime;
     db.updateAgentTask(sessionId, JSON.stringify({ response, results }), 'completed');
 
     return {
       sessionId,
       motherId,
-      motherName:      motherData.mother?.name,
+      motherName:       motherData.mother?.name,
       userInput,
-      intentsDetected: intents,
+      intentsDetected:  intents,
       agentLog,
       results,
       response,
-      gemini:          geminiMeta,
-      durationMs:      duration,
-      timestamp:       new Date().toISOString(),
+      cards,
+      followUpQuestions,
+      gemini:           geminiMeta,
+      durationMs:       duration,
+      timestamp:        new Date().toISOString(),
     };
   },
 };
 
-// ── Response composers ────────────────────────────────────────────────────────
-
+// ── Rich card builder ─────────────────────────────────────────────────────────
 /**
- * Hybrid response: prepend structured agent results (kit TX, audit summary, etc.)
- * then append Gemini's natural language answer.
+ * Builds an array of typed interactive cards from agent results.
+ * Each card has: { type, ...data }
+ * Types: 'appointment', 'calendar', 'tracking', 'products', 'order_confirm',
+ *        'qris', 'reminders', 'nutrition', 'audit', 'hospital_map'
  */
-function buildHybridResponse(results, geminiText) {
+function buildCards(intents, results, mother) {
+  const cards = [];
+
+  // ── Appointment card ──────────────────────────────────────────────────────
+  if (results.appointment?.success) {
+    const a = results.appointment;
+    const puskesmasCoords = {
+      PKM001: { lat: -10.1772, lng: 123.6070, address: 'Jl. Timor Raya No.1, Kupang, NTT' },
+      PKM002: { lat: -8.8432,  lng: 121.6629, address: 'Jl. Pahlawan No.5, Ende, NTT' },
+      PKM003: { lat: -2.5916,  lng: 140.6690, address: 'Jl. Raya Sentani No.10, Jayapura, Papua' },
+      PKM004: { lat: -3.6954,  lng: 128.1814, address: 'Jl. Dr. Kayadoe No.3, Ambon, Maluku' },
+      PKM005: { lat: -8.5833,  lng: 116.1167, address: 'Jl. Pejanggik No.8, Mataram, NTB' },
+    };
+    const coords = puskesmasCoords[a.appointment?.puskesmas_id] || puskesmasCoords['PKM001'];
+    cards.push({
+      type:        'appointment',
+      urgency:     a.urgency,
+      doctor:      a.doctor,
+      specialty:   a.specialty,
+      scheduledAt: a.scheduledAt,
+      reason:      a.appointment?.reason,
+      status:      a.appointment?.status,
+      puskesmas:   mother?.puskesmas_id,
+      address:     coords.address,
+      lat:         coords.lat,
+      lng:         coords.lng,
+      mapsUrl:     `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`,
+    });
+  }
+
+  // ── Vaccination calendar card ─────────────────────────────────────────────
+  if (results.reminder?.success) {
+    const upcoming = (results.reminder.reminders || [])
+      .filter(r => Math.ceil((new Date(r.due_date) - Date.now()) / 86400000) >= 0)
+      .slice(0, 6);
+    if (upcoming.length > 0) {
+      cards.push({ type: 'calendar', reminders: upcoming });
+    }
+  }
+
+  // ── Health milestone calendar ─────────────────────────────────────────────
+  if (results.healthAudit?.upcomingMilestones?.length > 0) {
+    cards.push({
+      type:       'milestones',
+      milestones: results.healthAudit.upcomingMilestones,
+      summary:    results.healthAudit.summary,
+      risks:      results.healthAudit.risks || [],
+    });
+  }
+
+  // ── Product grid card ─────────────────────────────────────────────────────
+  if (results.shop?.products?.length > 0 && !results.shop?.order) {
+    cards.push({
+      type:     'products',
+      products: results.shop.products.slice(0, 6),
+      category: results.shop.category,
+    });
+  }
+
+  // ── Order confirmation + QRIS ─────────────────────────────────────────────
+  if (results.shop?.success && results.shop?.order) {
+    cards.push({
+      type:    'order_confirm',
+      order:   results.shop.order,
+      product: results.shop.product,
+      qty:     results.shop.qty,
+      total:   results.shop.total,
+    });
+    // Show QRIS for payment
+    cards.push({
+      type:      'qris',
+      amount:    results.shop.total,
+      orderId:   results.shop.order?.id,
+      merchant:  'NutriSakti Shop',
+      // Dummy QRIS data — in production this would be a real QR payload
+      qrData:    `NUTRISAKTI-${results.shop.order?.id}-${results.shop.total}USDC`,
+    });
+  }
+
+  // ── Kit delivery tracking card ────────────────────────────────────────────
+  if (results.kit?.success) {
+    cards.push({
+      type:     'tracking',
+      kitType:  results.kit.kitType,
+      txHash:   results.kit.txHash,
+      status:   'ordered',
+      steps: [
+        { label: 'Order Placed',   done: true,  time: new Date().toISOString() },
+        { label: 'DID Verified',   done: true,  time: new Date().toISOString() },
+        { label: 'USDC Escrowed',  done: true,  time: new Date().toISOString() },
+        { label: 'Dispatched',     done: false, time: null },
+        { label: 'Out for Delivery', done: false, time: null },
+        { label: 'Delivered',      done: false, time: null },
+      ],
+      usdcEscrowed: results.kit.usdcEscrowed,
+    });
+  }
+
+  // ── Nutrition card ────────────────────────────────────────────────────────
+  if (results.nutrition) {
+    const n = results.nutrition;
+    cards.push({
+      type:        'nutrition',
+      food:        n.foodIdentified,
+      nutrients:   n.nutrients || {},
+      riskFlags:   n.riskFlags || [],
+      recommendation: n.recommendation,
+    });
+  }
+
+  // ── Audit summary card ────────────────────────────────────────────────────
+  if (results.auditAll) {
+    cards.push({
+      type:          'audit',
+      totalMothers:  results.auditAll.totalMothers,
+      highRisk:      results.auditAll.highRisk,
+      uncoveredBPJS: results.auditAll.uncoveredBPJS,
+      mothers:       (results.auditAll.mothers || []).slice(0, 5),
+    });
+  }
+
+  return cards;
+}
+
+// ── Fallback text (no Gemini) ─────────────────────────────────────────────────
+function buildFallbackText(intents, results, mother) {
+  const name = mother?.name || 'Ibu';
   const parts = [];
 
   if (results.nutrition) {
     const n = results.nutrition;
     parts.push(`✅ Catatan nutrisi "${n.foodIdentified}" telah disimpan.`);
-    if (n.riskFlags?.includes('anemia_risk')) {
-      parts.push(`⚠️ Terdeteksi risiko anemia. Bidan telah diberitahu via WhatsApp.`);
-    }
+    if (n.riskFlags?.includes('anemia_risk')) parts.push(`⚠️ Terdeteksi risiko anemia. Bidan telah diberitahu.`);
+    parts.push(`💡 ${n.recommendation}`);
   }
+  if (results.appointment?.success) parts.push(results.appointment.message);
+  if (results.reminder?.success) parts.push(results.reminder.summary);
+  if (results.kit?.success) parts.push(`📦 Kit ${results.kit.kitType} berhasil dipesan.`);
+  if (results.shop?.message) parts.push(results.shop.message);
+  if (results.healthAudit) parts.push(`📋 ${results.healthAudit.summary}`);
+  if (results.auditAll) parts.push(`📊 Audit: ${results.auditAll.totalMothers} ibu, ${results.auditAll.highRisk} risiko tinggi.`);
 
-  if (results.kit) {
-    const k = results.kit;
-    if (k.success) {
-      parts.push(`📦 Kit ${k.kitType} berhasil diminta! USDC ${k.usdcEscrowed} di-escrow.`);
-      parts.push(`🔗 TX Hash: ${k.txHash?.slice(0, 20)}...`);
-    } else {
-      parts.push(`❌ Permintaan kit gagal: ${k.error}`);
-    }
+  if (parts.length === 0) {
+    parts.push(`Halo ${name}! Saya Guardian Agent NutriSakti. Saya siap membantu Anda dengan informasi kesehatan ibu dan bayi, jadwal vaksinasi, reservasi dokter, atau belanja produk kebutuhan ibu dan bayi.`);
   }
-
-  if (results.healthAudit) {
-    const h = results.healthAudit;
-    parts.push(`📋 ${h.summary}`);
-    if (h.upcomingMilestones?.length > 0) {
-      parts.push(`📅 Milestone berikutnya: ${h.upcomingMilestones[0].label} (${h.upcomingMilestones[0].daysUntil} hari lagi)`);
-    }
-  }
-
-  if (results.auditAll) {
-    const a = results.auditAll;
-    parts.push(`📊 Audit selesai: ${a.totalMothers} ibu, ${a.highRisk} risiko tinggi, ${a.uncoveredBPJS} tanpa BPJS.`);
-  }
-
-  if (results.appointment) {
-    parts.push(results.appointment.message || '');
-  }
-
-  if (results.reminder) {
-    parts.push(results.reminder.summary || '');
-  }
-
-  if (results.shop) {
-    if (results.shop.message) {
-      parts.push(results.shop.message);
-    } else if (results.shop.needsSelection && results.shop.products?.length > 0) {
-      const list = results.shop.products.slice(0, 4).map(p =>
-        `  ${p.image_emoji} [${p.id}] ${p.name} — Rp${p.price_idr.toLocaleString('id-ID')} / ${p.price_usdc} USDC`
-      ).join('\n');
-      parts.push(`🛍️ Produk tersedia:\n${list}\n\nKetik ID produk + jumlah untuk memesan (contoh: "pesan PRD001 2 buah")`);
-    }
-  }
-
-  // Append Gemini's enriched natural language answer
-  if (parts.length > 0) {
-    parts.push(''); // blank line separator
-  }
-  parts.push(geminiText);
-
   return parts.join('\n');
 }
 
-/**
- * Rule-based fallback response (used when Gemini is unavailable).
- */
-function composeResponse(input, intents, results, mother) {
-  const parts = [];
-  const name  = mother?.name || 'Ibu';
-
-  if (results.nutrition) {
-    const n = results.nutrition;
-    parts.push(`✅ Catatan nutrisi "${n.foodIdentified}" telah disimpan.`);
-    if (n.riskFlags.includes('anemia_risk')) {
-      parts.push(`⚠️ Terdeteksi risiko anemia. Bidan telah diberitahu via WhatsApp.`);
-    }
-    parts.push(`💡 ${n.recommendation}`);
-  }
-
-  if (results.kit) {
-    const k = results.kit;
-    if (k.success) {
-      parts.push(`📦 Kit ${k.kitType} berhasil diminta! USDC ${k.usdcEscrowed} di-escrow.`);
-      parts.push(`🔗 TX Hash: ${k.txHash?.slice(0, 20)}...`);
-    } else {
-      parts.push(`❌ Permintaan kit gagal: ${k.error}`);
-    }
-  }
-
-  if (results.healthAudit) {
-    const h = results.healthAudit;
-    parts.push(`📋 ${h.summary}`);
-    if (h.upcomingMilestones?.length > 0) {
-      parts.push(`📅 Milestone berikutnya: ${h.upcomingMilestones[0].label} (${h.upcomingMilestones[0].daysUntil} hari lagi)`);
-    }
-  }
-
-  if (results.auditAll) {
-    const a = results.auditAll;
-    parts.push(`📊 Audit selesai: ${a.totalMothers} ibu, ${a.highRisk} risiko tinggi, ${a.uncoveredBPJS} tanpa BPJS.`);
-  }
-
-  if (results.appointment) {
-    parts.push(results.appointment.message || '');
-  }
-
-  if (results.reminder) {
-    parts.push(results.reminder.summary || '');
-  }
-
-  if (results.shop) {
-    if (results.shop.message) {
-      parts.push(results.shop.message);
-    } else if (results.shop.needsSelection && results.shop.products?.length > 0) {
-      const list = results.shop.products.slice(0, 4).map(p =>
-        `  ${p.image_emoji} [${p.id}] ${p.name} — Rp${p.price_idr.toLocaleString('id-ID')} / ${p.price_usdc} USDC`
-      ).join('\n');
-      parts.push(`🛍️ Produk tersedia:\n${list}\n\nKetik ID produk + jumlah untuk memesan (contoh: "pesan PRD001 2 buah")`);
-    }
-  }
-
-  if (parts.length === 0) {
-    parts.push(`Halo ${name}! Saya Guardian Agent NutriSakti. Saya bisa membantu dengan nutrisi, permintaan kit, pemeriksaan kesehatan, reservasi dokter, pengingat vaksinasi, atau belanja produk ibu & bayi.`);
-  }
-
-  return parts.join('\n');
+function buildFallbackFollowUps(intents, mother) {
+  const phase = mother?.phase || 'pregnancy';
+  const base = {
+    pregnancy: ['Makanan baik untuk ibu hamil?', 'Kapan jadwal kontrol berikutnya?', 'Cara mengatasi mual pagi?'],
+    infant:    ['Jadwal imunisasi bayi saya?', 'Kapan mulai MPASI?', 'Cara meningkatkan ASI?'],
+    toddler:   ['Menu MPASI untuk balita?', 'Jadwal vaksin booster?', 'Cara stimulasi tumbuh kembang?'],
+  };
+  return base[phase] || base['pregnancy'];
 }
 
 module.exports = guardianAgent;

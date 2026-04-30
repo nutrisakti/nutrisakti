@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, createContext, useContext, use
 import * as api from './api';
 import { translations } from './i18n';
 import { themes } from './theme';
+import { RichCard, FollowUpChips } from './ChatCards';
 
 // ── App Context ───────────────────────────────────────────────────────────────
 const AppCtx = createContext({});
@@ -158,31 +159,36 @@ function AgentChat({ mothers }) {
   const { t, S, theme } = useApp();
   const [motherId, setMotherId] = useState(mothers[0]?.id || 'MTR001');
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState([{ role:'agent', text: t.chat_welcome, gemini: false }]);
+  const [messages, setMessages] = useState([{
+    role: 'agent', text: t.chat_welcome, gemini: false, cards: [], followUps: [],
+  }]);
   const [loading, setLoading] = useState(false);
   const [lastResult, setLastResult] = useState(null);
   const [showLog, setShowLog] = useState(false);
   const msgEnd = useRef(null);
 
-  useEffect(() => { msgEnd.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
+  useEffect(() => { msgEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const send = async () => {
-    if (!input.trim() || loading) return;
-    const msg = input.trim(); setInput('');
-    setMessages(m => [...m, { role:'user', text:msg }]);
+  const send = async (text) => {
+    const msg = (text || input).trim();
+    if (!msg || loading) return;
+    setInput('');
+    setMessages(m => [...m, { role: 'user', text: msg }]);
     setLoading(true);
     try {
       const r = await api.chat(motherId, msg);
       setLastResult(r);
       setMessages(m => [...m, {
-        role:    'agent',
-        text:    r.response,
-        gemini:  r.gemini?.used  || false,
-        flagged: r.gemini?.flagged || false,
-        flags:   r.gemini?.flags  || [],
+        role:      'agent',
+        text:      r.response,
+        cards:     r.cards     || [],
+        followUps: r.followUpQuestions || [],
+        gemini:    r.gemini?.used    || false,
+        flagged:   r.gemini?.flagged || false,
+        flags:     r.gemini?.flags   || [],
       }]);
-    } catch(e) {
-      setMessages(m => [...m, { role:'agent', text:'❌ Error: '+e.message, gemini:false }]);
+    } catch (e) {
+      setMessages(m => [...m, { role: 'agent', text: '❌ Error: ' + e.message, cards: [], followUps: [] }]);
     }
     setLoading(false);
   };
@@ -190,81 +196,111 @@ function AgentChat({ mothers }) {
   const chatHeight = S.isMobile ? 'calc(100vh - 200px)' : 'calc(100vh - 140px)';
 
   return (
-    <div style={{display:'flex', gap:16, height:chatHeight, minHeight: S.isMobile ? 400 : 500}}>
-      {/* Chat panel */}
-      <div style={{...S.card, flex:1, display:'flex', flexDirection:'column', padding:0, overflow:'hidden', minWidth:0}}>
+    <div style={{ display: 'flex', gap: 16, height: chatHeight, minHeight: S.isMobile ? 400 : 500 }}>
+
+      {/* ── Chat panel ── */}
+      <div style={{ ...S.card, flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', minWidth: 0 }}>
 
         {/* Header */}
-        <div style={{padding: S.isMobile ? '10px 14px' : '14px 20px', borderBottom:`1px solid ${S.dividerColor}`, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-          <span style={{fontSize:12, color:'#64748b'}}>{t.mother_label}</span>
-          <select value={motherId} onChange={e=>setMotherId(e.target.value)} style={{...S.select, flex:1, minWidth:0}}>
-            {mothers.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+        <div style={{ padding: S.isMobile ? '10px 14px' : '12px 20px', borderBottom: `1px solid ${S.dividerColor}`, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>{t.mother_label}</span>
+          <select value={motherId} onChange={e => setMotherId(e.target.value)} style={{ ...S.select, flex: 1, minWidth: 0 }}>
+            {mothers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <span style={S.agentTag('GuardianAgent')}>GuardianAgent</span>
-          {/* Gemini badge */}
-          <span style={{
-            display:'inline-flex', alignItems:'center', gap:3,
-            background:'linear-gradient(135deg,#4285f4,#34a853)',
-            color:'#fff', padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:700,
-          }}>✦ Gemini</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>✦ Gemini</span>
           {S.isMobile && (
-            <button style={{...S.btnSm('#334155'), marginLeft:'auto'}} onClick={()=>setShowLog(v=>!v)}>
+            <button style={{ ...S.btnSm('#334155'), marginLeft: 'auto' }} onClick={() => setShowLog(v => !v)}>
               {showLog ? '💬 Chat' : '📋 Log'}
             </button>
           )}
         </div>
 
-        {/* On mobile: toggle between chat and log */}
+        {/* Messages */}
         {(!S.isMobile || !showLog) && (
           <>
-            <div style={{flex:1, overflow:'auto', padding: S.isMobile ? 12 : 16, display:'flex', flexDirection:'column', gap:10}}>
-              {messages.map((msg,i) => (
-                <div key={i} style={S.chatBubble(msg.role==='user')}>
-                  {msg.role==='agent' && (
-                    <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap'}}>
-                      <span style={{fontSize:10, color:'#38bdf8'}}>🤖 Guardian Agent</span>
-                      {msg.gemini && (
-                        <span style={{fontSize:9, background:'linear-gradient(135deg,#4285f4,#34a853)', color:'#fff', padding:'1px 5px', borderRadius:6, fontWeight:700}}>
-                          ✦ Gemini
-                        </span>
-                      )}
-                      {msg.flagged && (
-                        <span title={`Filtered: ${msg.flags?.join(', ')}`} style={{fontSize:9, background:'#92400e', color:'#fde68a', padding:'1px 5px', borderRadius:6, fontWeight:700, cursor:'help'}}>
-                          🛡 Safety filtered
-                        </span>
-                      )}
+            <div style={{ flex: 1, overflow: 'auto', padding: S.isMobile ? 10 : 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {messages.map((msg, i) => (
+                <div key={i}>
+                  {/* Bubble */}
+                  <div style={{
+                    ...S.chatBubble(msg.role === 'user'),
+                    maxWidth: msg.role === 'user' ? (S.isMobile ? '85%' : '70%') : '100%',
+                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  }}>
+                    {msg.role === 'agent' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, color: '#38bdf8', fontWeight: 700 }}>🤖 Guardian Agent</span>
+                        {msg.gemini && (
+                          <span style={{ fontSize: 9, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '1px 5px', borderRadius: 5, fontWeight: 700 }}>✦ Gemini</span>
+                        )}
+                        {msg.flagged && (
+                          <span title={`Filtered: ${msg.flags?.join(', ')}`} style={{ fontSize: 9, background: '#92400e', color: '#fde68a', padding: '1px 5px', borderRadius: 5, fontWeight: 700, cursor: 'help' }}>🛡 Filtered</span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.text}</div>
+                  </div>
+
+                  {/* Rich cards (agent only) */}
+                  {msg.role === 'agent' && msg.cards?.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                      {msg.cards.map((card, ci) => (
+                        <RichCard key={ci} card={card} theme={theme} S={S} onAction={send} />
+                      ))}
                     </div>
                   )}
-                  {msg.text}
+
+                  {/* Follow-up chips (last agent message only) */}
+                  {msg.role === 'agent' && i === messages.length - 1 && msg.followUps?.length > 0 && (
+                    <FollowUpChips questions={msg.followUps} onSelect={send} theme={theme} S={S} />
+                  )}
                 </div>
               ))}
+
               {loading && (
-                <div style={S.chatBubble(false)}>
-                  <div style={{fontSize:10, color:'#38bdf8', marginBottom:4}}>🤖 Guardian Agent</div>
-                  <span style={{opacity:0.7}}>{t.processing} ✦</span>
+                <div style={{ ...S.chatBubble(false), alignSelf: 'flex-start' }}>
+                  <div style={{ fontSize: 10, color: '#38bdf8', marginBottom: 4, fontWeight: 700 }}>🤖 Guardian Agent</div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{
+                        width: 7, height: 7, borderRadius: '50%', background: '#38bdf8',
+                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                        opacity: 0.7,
+                      }} />
+                    ))}
+                    <span style={{ fontSize: 11, color: theme.textFaint, marginLeft: 4 }}>Thinking...</span>
+                  </div>
                 </div>
               )}
               <div ref={msgEnd} />
             </div>
-            <div style={{padding: S.isMobile ? 10 : 12, borderTop:`1px solid ${S.dividerColor}`, display:'flex', gap:8}}>
-              <input style={S.input} value={input} onChange={e=>setInput(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&send()} placeholder={t.type_message} />
-              <button style={S.btn()} onClick={send} disabled={loading}>{t.send}</button>
+
+            {/* Input bar */}
+            <div style={{ padding: S.isMobile ? '8px 10px' : '10px 14px', borderTop: `1px solid ${S.dividerColor}`, display: 'flex', gap: 8 }}>
+              <input
+                style={S.input}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && send()}
+                placeholder={t.type_message}
+              />
+              <button style={S.btn()} onClick={() => send()} disabled={loading}>{t.send}</button>
             </div>
           </>
         )}
 
-        {/* Mobile log view */}
+        {/* Mobile log toggle */}
         {S.isMobile && showLog && (
-          <div style={{flex:1, overflow:'auto', padding:12}}>
+          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
             <AgentLogPanel lastResult={lastResult} t={t} S={S} />
           </div>
         )}
       </div>
 
-      {/* Desktop/tablet log panel */}
+      {/* ── Desktop log panel ── */}
       {!S.isMobile && (
-        <div style={{...S.card, width: S.isTablet ? 260 : 320, overflow:'auto', flexShrink:0}}>
+        <div style={{ ...S.card, width: S.isTablet ? 240 : 300, overflow: 'auto', flexShrink: 0 }}>
           <AgentLogPanel lastResult={lastResult} t={t} S={S} />
         </div>
       )}
@@ -276,36 +312,38 @@ function AgentLogPanel({ lastResult, t, S }) {
   return (
     <>
       <div style={S.cardTitle}>{t.agent_log}</div>
-      {!lastResult && <div style={{color:'#64748b',fontSize:12}}>{t.send_to_see_log}</div>}
+      {!lastResult && <div style={{ color: '#64748b', fontSize: 12 }}>{t.send_to_see_log}</div>}
       {lastResult && (
         <>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{t.session_label}: {lastResult.sessionId?.slice(0,8)}... | {lastResult.durationMs}ms</div>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>{t.intents_label}: {lastResult.intentsDetected?.join(', ')}</div>
-
-          {/* Gemini status row */}
-          <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:12, flexWrap:'wrap'}}>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+            {t.session_label}: {lastResult.sessionId?.slice(0, 8)}... | {lastResult.durationMs}ms
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+            {t.intents_label}: {lastResult.intentsDetected?.join(', ')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {lastResult.gemini?.used ? (
-              <span style={{fontSize:10, background:'linear-gradient(135deg,#4285f4,#34a853)', color:'#fff', padding:'2px 7px', borderRadius:8, fontWeight:700}}>
+              <span style={{ fontSize: 10, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '2px 7px', borderRadius: 8, fontWeight: 700 }}>
                 ✦ Gemini {lastResult.gemini.model || ''}
               </span>
             ) : (
-              <span style={{fontSize:10, background:'#334155', color:'#94a3b8', padding:'2px 7px', borderRadius:8}}>
-                Rule-based fallback
-              </span>
+              <span style={{ fontSize: 10, background: '#334155', color: '#94a3b8', padding: '2px 7px', borderRadius: 8 }}>Rule-based</span>
             )}
             {lastResult.gemini?.flagged && (
-              <span style={{fontSize:10, background:'#92400e', color:'#fde68a', padding:'2px 7px', borderRadius:8, fontWeight:700}}>
-                🛡 Safety filtered
+              <span style={{ fontSize: 10, background: '#92400e', color: '#fde68a', padding: '2px 7px', borderRadius: 8, fontWeight: 700 }}>🛡 Filtered</span>
+            )}
+            {lastResult.cards?.length > 0 && (
+              <span style={{ fontSize: 10, background: '#1d4ed8', color: '#fff', padding: '2px 7px', borderRadius: 8 }}>
+                {lastResult.cards.length} cards
               </span>
             )}
           </div>
-
-          {lastResult.agentLog?.map((log,i) => (
-            <div key={i} style={{padding:'6px 0', borderBottom:`1px solid ${S.dividerColor}`, fontSize:11}}>
+          {lastResult.agentLog?.map((log, i) => (
+            <div key={i} style={{ padding: '5px 0', borderBottom: `1px solid ${S.dividerColor}`, fontSize: 11 }}>
               <span style={S.agentTag(log.agent)}>{log.agent}</span>
-              <span style={{color:'#94a3b8'}}>{log.action}</span>
-              {log.tool && <span style={{...S.tag('#1e3a5f'),marginLeft:4}}>🛠 {log.tool}</span>}
-              {log.subAgent && <span style={{...S.tag('#3b1f5e'),marginLeft:4}}>→ {log.subAgent}</span>}
+              <span style={{ color: '#94a3b8' }}>{log.action}</span>
+              {log.tool && <span style={{ ...S.tag('#1e3a5f'), marginLeft: 4 }}>🛠 {log.tool}</span>}
+              {log.subAgent && <span style={{ ...S.tag('#3b1f5e'), marginLeft: 4 }}>→ {log.subAgent}</span>}
             </div>
           ))}
         </>
@@ -780,7 +818,7 @@ function Appointments({ mothers }) {
                     </td>
                     <td style={S.td}><div style={{fontWeight:600, fontSize:12}}>{a.doctor}</div><div style={{fontSize:10, color:theme.textFaint}}>{a.specialty}</div></td>
                     <td style={S.td} title={a.reason}><span style={{fontSize:11}}>{a.reason?.slice(0,40)}{a.reason?.length>40?'…':''}</span></td>
-                    <td style={S.td} style={{...S.td, whiteSpace:'nowrap', fontSize:11}}>{fmt(a.scheduled_at)}</td>
+                    <td style={{...S.td, whiteSpace:'nowrap', fontSize:11}}>{fmt(a.scheduled_at)}</td>
                     <td style={S.td}>
                       <span style={{background:statusColor[a.status]||'#6b7280', color:'#fff', padding:'2px 7px', borderRadius:8, fontSize:10, fontWeight:600}}>
                         {t['appt_'+a.status] || a.status}
@@ -879,7 +917,7 @@ function Reminders({ mothers }) {
                     <tr key={r.id}>
                       <td style={S.td}>{r.mother_name}</td>
                       <td style={S.td}><span style={{fontWeight:600, fontSize:12}}>💉 {r.vaccine_name || r.type}</span></td>
-                      <td style={S.td} style={{...S.td, whiteSpace:'nowrap', fontSize:11}}>
+                      <td style={{...S.td, whiteSpace:'nowrap', fontSize:11}}>
                         {new Date(r.due_date).toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' })}
                       </td>
                       <td style={S.td}>
