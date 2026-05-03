@@ -26,11 +26,14 @@ function CardShell({ icon, title, color, children, theme, S }) {
     <div style={{
       background: theme.surface,
       border: `1px solid ${color || theme.border}`,
-      borderLeft: `3px solid ${color || '#0ea5e9'}`,
+      borderLeft: `3px solid ${color || theme.accent}`,
       borderRadius: 10,
       overflow: 'hidden',
-      marginTop: 8,
-      fontSize: S.isMobile ? 12 : 13,
+      marginTop: 6,
+      fontSize: S.isMobile ? 13 : 14,
+      // Prevent horizontal overflow on mobile
+      maxWidth: '100%',
+      overflowX: 'hidden',
     }}>
       <div style={{
         background: color ? color + '22' : theme.bg,
@@ -68,8 +71,7 @@ function AppointmentCard({ card, theme, S }) {
       title={card.urgency === 'emergency' ? 'DARURAT — Janji Temu Dikonfirmasi' : card.urgency === 'urgent' ? 'Janji Temu Mendesak' : 'Janji Temu Rutin'}
       color={color} theme={theme} S={S}>
 
-      <div style={{ display: 'grid', gridTemplateColumns: S.isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: S.isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>        <div>
           <Row label="Dokter"    value={card.doctor}    theme={theme} bold />
           <Row label="Spesialis" value={card.specialty} theme={theme} />
           <Row label="Jadwal"    value={fmt(card.scheduledAt)} theme={theme} bold />

@@ -13,6 +13,7 @@ export const translations = {
     nav_reminders:   '🔔 Reminders',
     nav_shop:        '🛍️ Shop',
     nav_analytics:   '📈 Analytics',
+    nav_version:     '🔍 Version & Diagnostics',
     // Topbar
     app_subtitle:    'Multi-Agent System v4',
     api_label:       'API',
@@ -253,6 +254,7 @@ export const translations = {
     nav_reminders:   '🔔 Pengingat',
     nav_shop:        '🛍️ Toko',
     nav_analytics:   '📈 Analitik',
+    nav_version:     '🔍 Versi & Diagnostik',
     app_subtitle:    'Sistem Multi-Agent v4',
     api_label:       'API',
     total_mothers:   'Total Ibu',

@@ -3,6 +3,21 @@ import * as api from './api';
 import { translations } from './i18n';
 import { themes } from './theme';
 import { RichCard, FollowUpChips } from './ChatCards';
+import { mdToHtml } from './markdown';
+
+// ── Markdown renderer ─────────────────────────────────────────────────────────
+// Converts Gemini's markdown output to styled HTML inside a chat bubble.
+// Uses dangerouslySetInnerHTML — safe because mdToHtml escapes all raw HTML
+// before processing, and only emits a known safe allow-list of tags.
+function MarkdownText({ text, style }) {
+  if (!text) return null;
+  return (
+    <div
+      style={{ lineHeight: 1.65, wordBreak: 'break-word', overflowWrap: 'break-word', ...style }}
+      dangerouslySetInnerHTML={{ __html: mdToHtml(text) }}
+    />
+  );
+}
 
 // ── App Context ───────────────────────────────────────────────────────────────
 const AppCtx = createContext({});
@@ -50,6 +65,7 @@ const makeS = (theme, bp) => {
       fontFamily: '"Nunito", "Segoe UI", system-ui, -apple-system, sans-serif',
       fontSize: fs.base,
       position: 'relative',
+      overflowX: 'hidden',  // prevent any horizontal scroll at root
     },
     sidebar: {
       width: isMobile ? '100%' : isTablet ? 220 : 256,
@@ -94,31 +110,40 @@ const makeS = (theme, bp) => {
     main: {
       flex: 1, display: 'flex', flexDirection: 'column',
       overflow: 'hidden', minWidth: 0,
-      ...(isMobile ? { paddingBottom: 68 } : {}),
+      overflowX: 'hidden',
+      ...(isMobile ? { paddingBottom: 60 } : {}),
     },
     topbar: {
       background: theme.surface,
-      padding: isMobile ? '12px 16px' : '14px 28px',
-      borderBottom: `2px solid ${theme.border}`,
+      padding: isMobile ? '10px 14px' : '14px 28px',
+      borderBottom: `1px solid ${theme.border}`,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap: 10, flexShrink: 0,
+      gap: 8, flexShrink: 0,
       boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
     },
     topbarLeft:  { display: 'flex', alignItems: 'center', gap: 12 },
     topbarTitle: { fontSize: isMobile ? fs.md : fs.lg, fontWeight: 700, color: theme.text },
     hamburger:   { display: isMobile ? 'flex' : 'none', background: 'none', border: 'none', color: theme.text, fontSize: 24, cursor: 'pointer', padding: '2px 4px', alignItems: 'center' },
     badge:       (color) => ({ background: color, color: '#fff', padding: '3px 10px', borderRadius: 20, fontSize: fs.xs, fontWeight: 700, whiteSpace: 'nowrap' }),
-    content:     { flex: 1, overflow: 'auto', padding: isMobile ? 14 : isTablet ? 20 : 28 },
+    content: {
+      flex: 1, overflow: 'auto',
+      // On mobile: minimal padding so content gets maximum space
+      padding: isMobile ? '10px 10px' : isTablet ? 20 : 28,
+      overflowX: 'hidden',  // never scroll horizontally on mobile
+      WebkitOverflowScrolling: 'touch',
+      // Allow children to use flex-fill on mobile
+      display: 'flex', flexDirection: 'column',
+    },
 
     // ── Cards & grids ────────────────────────────────────────────────────────
-    grid2: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 18, marginBottom: isMobile ? 12 : 18 },
-    grid3: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: isMobile ? 10 : 14, marginBottom: isMobile ? 12 : 18 },
-    grid5: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5,1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 12 : 18 },
+    grid2: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 8 : 18, marginBottom: isMobile ? 8 : 18 },
+    grid3: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: isMobile ? 8 : 14, marginBottom: isMobile ? 8 : 18 },
+    grid5: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5,1fr)', gap: isMobile ? 6 : 12, marginBottom: isMobile ? 8 : 18 },
 
     card: {
       background: theme.surface,
-      borderRadius: isMobile ? 14 : 16,
-      padding: isMobile ? 16 : 22,
+      borderRadius: isMobile ? 12 : 16,
+      padding: isMobile ? 12 : 22,
       border: `1px solid ${theme.border}`,
       boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
     },
@@ -336,13 +361,12 @@ function Mothers({ mothers, onSelect }) {
 function AgentChat({ mothers }) {
   const { t, S, theme } = useApp();
   const [motherId, setMotherId] = useState(mothers[0]?.id || 'MTR001');
-  const [input, setInput] = useState('');
+  const [input, setInput]       = useState('');
   const [messages, setMessages] = useState([{
     role: 'agent', text: t.chat_welcome, gemini: false, cards: [], followUps: [],
   }]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
   const [lastResult, setLastResult] = useState(null);
-  const [showLog, setShowLog] = useState(false);
   const msgEnd = useRef(null);
 
   useEffect(() => { msgEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -359,169 +383,251 @@ function AgentChat({ mothers }) {
       setMessages(m => [...m, {
         role:      'agent',
         text:      r.response,
-        cards:     r.cards     || [],
-        followUps: r.followUpQuestions || [],
-        gemini:    r.gemini?.used    || false,
-        flagged:   r.gemini?.flagged || false,
-        flags:     r.gemini?.flags   || [],
+        cards:     r.cards              || [],
+        followUps: r.followUpQuestions  || [],
+        gemini:    r.gemini?.used       || false,
+        flagged:   r.gemini?.flagged    || false,
+        flags:     r.gemini?.flags      || [],
       }]);
     } catch (e) {
-      setMessages(m => [...m, { role: 'agent', text: '❌ Error: ' + e.message, cards: [], followUps: [] }]);
+      setMessages(m => [...m, { role: 'agent', text: '❌ ' + e.message, cards: [], followUps: [] }]);
     }
     setLoading(false);
   };
 
-  const chatHeight = S.isMobile ? 'calc(100vh - 200px)' : 'calc(100vh - 140px)';
+  // On mobile: use fixed positioning for input bar so it never overlaps the bottom nav
+  const INPUT_BAR_H = 64; // px — height of the input bar on mobile
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: chatHeight, minHeight: S.isMobile ? 400 : 500 }}>
+    <div style={{
+      display: 'flex', gap: S.isMobile ? 0 : 16,
+      // Desktop: fixed height. Mobile: fill remaining viewport height
+      height: S.isMobile ? 'auto' : 'calc(100vh - 140px)',
+      minHeight: S.isMobile ? 0 : 500,
+      // On mobile the component fills the content area which already has paddingBottom:60 for the nav
+      flex: S.isMobile ? 1 : 'none',
+    }}>
 
       {/* ── Chat panel ── */}
-      <div style={{ ...S.card, flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', minWidth: 0 }}>
+      <div style={{
+        ...S.card,
+        flex: 1, display: 'flex', flexDirection: 'column',
+        padding: 0, overflow: 'hidden', minWidth: 0,
+        ...(S.isMobile ? {
+          borderRadius: 0, border: 'none', boxShadow: 'none',
+          margin: '-10px',   // cancel content padding
+          // On mobile: fill from top of content area to just above the input bar
+          height: `calc(100vh - 50px - 60px - ${INPUT_BAR_H}px)`,
+          minHeight: 0,
+        } : {}),
+      }}>
 
-        {/* Header */}
-        <div style={{ padding: S.isMobile ? '10px 14px' : '12px 20px', borderBottom: `1px solid ${S.dividerColor}`, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: '#64748b' }}>{t.mother_label}</span>
-          <select value={motherId} onChange={e => setMotherId(e.target.value)} style={{ ...S.select, flex: 1, minWidth: 0 }}>
+        {/* ── Compact header ── */}
+        <div style={{
+          padding: S.isMobile ? '8px 12px' : '12px 20px',
+          borderBottom: `1px solid ${theme.border}`,
+          display: 'flex', gap: 6, alignItems: 'center',
+          background: theme.surface,
+          flexShrink: 0,
+        }}>
+          {/* Mother selector — compact on mobile */}
+          <select
+            value={motherId}
+            onChange={e => setMotherId(e.target.value)}
+            style={{
+              ...S.select,
+              flex: 1, minWidth: 0,
+              fontSize: S.isMobile ? 13 : 14,
+              padding: S.isMobile ? '5px 8px' : '8px 12px',
+            }}
+          >
             {mothers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
-          <span style={S.agentTag('GuardianAgent')}>GuardianAgent</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>✦ Gemini</span>
-          {S.isMobile && (
-            <button style={{ ...S.btnSm('#334155'), marginLeft: 'auto' }} onClick={() => setShowLog(v => !v)}>
-              {showLog ? '💬 Chat' : '📋 Log'}
-            </button>
+
+          {/* Icon badges — small on mobile */}
+          <span style={{
+            background: theme.accent, color: '#fff',
+            borderRadius: 6, padding: S.isMobile ? '3px 6px' : '3px 8px',
+            fontSize: S.isMobile ? 10 : 11, fontWeight: 700, flexShrink: 0,
+          }}>🤖</span>
+          <span style={{
+            background: 'linear-gradient(135deg,#4285f4,#34a853)',
+            color: '#fff', borderRadius: 6,
+            padding: S.isMobile ? '3px 6px' : '3px 8px',
+            fontSize: S.isMobile ? 10 : 11, fontWeight: 700, flexShrink: 0,
+          }}>✦</span>
+
+          {/* Desktop: show log toggle */}
+          {!S.isMobile && lastResult && (
+            <span style={{ fontSize: 11, color: theme.textFaint, flexShrink: 0 }}>
+              {lastResult.gemini?.used ? `✦ ${lastResult.gemini.model?.replace('gemini-','').replace('-lite','-L')}` : 'rule-based'}
+            </span>
           )}
         </div>
 
-        {/* Messages */}
-        {(!S.isMobile || !showLog) && (
-          <>
-            <div style={{ flex: 1, overflow: 'auto', padding: S.isMobile ? 10 : 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {messages.map((msg, i) => (
-                <div key={i}>
-                  {/* Bubble */}
-                  <div style={{
-                    ...S.chatBubble(msg.role === 'user'),
-                    maxWidth: msg.role === 'user' ? (S.isMobile ? '85%' : '70%') : '100%',
-                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  }}>
-                    {msg.role === 'agent' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 10, color: '#38bdf8', fontWeight: 700 }}>🤖 Guardian Agent</span>
-                        {msg.gemini && (
-                          <span style={{ fontSize: 9, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '1px 5px', borderRadius: 5, fontWeight: 700 }}>✦ Gemini</span>
-                        )}
-                        {msg.flagged && (
-                          <span title={`Filtered: ${msg.flags?.join(', ')}`} style={{ fontSize: 9, background: '#92400e', color: '#fde68a', padding: '1px 5px', borderRadius: 5, fontWeight: 700, cursor: 'help' }}>🛡 Filtered</span>
-                        )}
-                      </div>
+        {/* ── Messages ── */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: S.isMobile ? '10px 10px' : '14px 16px',
+          // On mobile: add bottom padding so last message clears the fixed input bar
+          paddingBottom: S.isMobile ? 80 : (S.isTablet ? 16 : 16),
+          display: 'flex', flexDirection: 'column', gap: S.isMobile ? 6 : 10,
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          {messages.map((msg, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+
+              {/* Bubble */}
+              <div style={{
+                ...S.chatBubble(msg.role === 'user'),
+                // On mobile: agent bubbles go full width, user bubbles max 80%
+                maxWidth: msg.role === 'user'
+                  ? (S.isMobile ? '80%' : '70%')
+                  : '100%',
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                // Tighter padding on mobile
+                padding: S.isMobile ? '10px 12px' : '12px 16px',
+                fontSize: S.isMobile ? 14 : 15,
+              }}>
+                {/* Agent label — icon only on mobile */}
+                {msg.role === 'agent' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <span style={{ fontSize: S.isMobile ? 11 : 12, color: theme.accent, fontWeight: 700 }}>
+                      🤖 {S.isMobile ? '' : 'Guardian Agent'}
+                    </span>
+                    {msg.gemini && !S.isMobile && (
+                      <span style={{ fontSize: 9, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '1px 5px', borderRadius: 5, fontWeight: 700 }}>✦ Gemini</span>
                     )}
-                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.text}</div>
+                    {msg.flagged && (
+                      <span title={`Filtered: ${msg.flags?.join(', ')}`} style={{ fontSize: 9, background: '#92400e', color: '#fde68a', padding: '1px 5px', borderRadius: 5, cursor: 'help' }}>🛡</span>
+                    )}
                   </div>
+                )}
+                {/* Render agent responses as markdown, user messages as plain text */}
+                {msg.role === 'agent'
+                  ? <MarkdownText text={msg.text} />
+                  : <div style={{ lineHeight: 1.6, wordBreak: 'break-word', overflowWrap: 'break-word' }}>{msg.text}</div>
+                }              </div>
 
-                  {/* Rich cards (agent only) */}
-                  {msg.role === 'agent' && msg.cards?.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                      {msg.cards.map((card, ci) => (
-                        <RichCard key={ci} card={card} theme={theme} S={S} onAction={send} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Follow-up chips (last agent message only) */}
-                  {msg.role === 'agent' && i === messages.length - 1 && msg.followUps?.length > 0 && (
-                    <FollowUpChips questions={msg.followUps} onSelect={send} theme={theme} S={S} />
-                  )}
-                </div>
-              ))}
-
-              {loading && (
-                <div style={{ ...S.chatBubble(false), alignSelf: 'flex-start' }}>
-                  <div style={{ fontSize: 10, color: '#38bdf8', marginBottom: 4, fontWeight: 700 }}>🤖 Guardian Agent</div>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    {[0, 1, 2].map(i => (
-                      <div key={i} style={{
-                        width: 7, height: 7, borderRadius: '50%', background: '#38bdf8',
-                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-                        opacity: 0.7,
-                      }} />
-                    ))}
-                    <span style={{ fontSize: 11, color: theme.textFaint, marginLeft: 4 }}>Thinking...</span>
-                  </div>
+              {/* Rich cards */}
+              {msg.role === 'agent' && msg.cards?.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {msg.cards.map((card, ci) => (
+                    <RichCard key={ci} card={card} theme={theme} S={S} onAction={send} />
+                  ))}
                 </div>
               )}
-              <div ref={msgEnd} />
-            </div>
 
-            {/* Input bar */}
-            <div style={{ padding: S.isMobile ? '8px 10px' : '10px 14px', borderTop: `1px solid ${S.dividerColor}`, display: 'flex', gap: 8 }}>
-              <input
-                style={S.input}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && send()}
-                placeholder={t.type_message}
-              />
-              <button style={S.btn()} onClick={() => send()} disabled={loading}>{t.send}</button>
+              {/* Follow-up chips — only on last agent message */}
+              {msg.role === 'agent' && i === messages.length - 1 && msg.followUps?.length > 0 && (
+                <FollowUpChips questions={msg.followUps} onSelect={send} theme={theme} S={S} />
+              )}
             </div>
-          </>
-        )}
+          ))}
 
-        {/* Mobile log toggle */}
-        {S.isMobile && showLog && (
-          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-            <AgentLogPanel lastResult={lastResult} t={t} S={S} />
-          </div>
-        )}
+          {/* Typing indicator */}
+          {loading && (
+            <div style={{ ...S.chatBubble(false), alignSelf: 'flex-start', padding: S.isMobile ? '10px 12px' : '12px 16px' }}>
+              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: theme.accent, opacity: 0.7,
+                    animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={msgEnd} />
+        </div>
+
+        {/* ── Input bar ── */}
+        <div style={{
+          // Mobile: fixed above the bottom nav bar (60px)
+          ...(S.isMobile ? {
+            position: 'fixed',
+            bottom: 60,          // sits on top of the 60px bottom nav
+            left: 0, right: 0,
+            zIndex: 90,
+            padding: '8px 12px',
+            background: theme.surface,
+            borderTop: `1px solid ${theme.border}`,
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.12)',
+          } : {
+            padding: '10px 14px',
+            borderTop: `1px solid ${theme.border}`,
+            flexShrink: 0,
+            background: theme.surface,
+          }),
+          display: 'flex', gap: 8,
+        }}>
+          <input
+            style={{ ...S.input, fontSize: S.isMobile ? 15 : 15 }}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder={t.type_message}
+          />
+          <button
+            style={{ ...S.btn(), padding: S.isMobile ? '10px 16px' : '10px 20px', flexShrink: 0 }}
+            onClick={() => send()}
+            disabled={loading}
+          >
+            {t.send}
+          </button>
+        </div>
       </div>
 
-      {/* ── Desktop log panel ── */}
+      {/* ── Desktop log panel — hidden on mobile ── */}
       {!S.isMobile && (
         <div style={{ ...S.card, width: S.isTablet ? 240 : 300, overflow: 'auto', flexShrink: 0 }}>
-          <AgentLogPanel lastResult={lastResult} t={t} S={S} />
+          <AgentLogPanel lastResult={lastResult} t={t} S={S} theme={theme} />
         </div>
       )}
     </div>
   );
 }
 
-function AgentLogPanel({ lastResult, t, S }) {
+
+function AgentLogPanel({ lastResult, t, S, theme }) {
   return (
     <>
       <div style={S.cardTitle}>{t.agent_log}</div>
-      {!lastResult && <div style={{ color: '#64748b', fontSize: 12 }}>{t.send_to_see_log}</div>}
+      {!lastResult && <div style={{ color: theme.textFaint, fontSize: S.fs?.sm || 14 }}>{t.send_to_see_log}</div>}
       {lastResult && (
         <>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+          <div style={{ fontSize: S.fs?.xs || 12, color: theme.textFaint, marginBottom: 6 }}>
             {t.session_label}: {lastResult.sessionId?.slice(0, 8)}... | {lastResult.durationMs}ms
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+          <div style={{ fontSize: S.fs?.xs || 12, color: theme.textFaint, marginBottom: 8 }}>
             {t.intents_label}: {lastResult.intentsDetected?.join(', ')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {lastResult.gemini?.used ? (
               <span style={{ fontSize: 10, background: 'linear-gradient(135deg,#4285f4,#34a853)', color: '#fff', padding: '2px 7px', borderRadius: 8, fontWeight: 700 }}>
-                ✦ Gemini {lastResult.gemini.model || ''}
+                ✦ {lastResult.gemini.model || 'Gemini'}
               </span>
             ) : (
-              <span style={{ fontSize: 10, background: '#334155', color: '#94a3b8', padding: '2px 7px', borderRadius: 8 }}>Rule-based</span>
+              <span style={{ fontSize: 10, background: theme.border, color: theme.textMuted, padding: '2px 7px', borderRadius: 8 }}>Rule-based</span>
             )}
             {lastResult.gemini?.flagged && (
               <span style={{ fontSize: 10, background: '#92400e', color: '#fde68a', padding: '2px 7px', borderRadius: 8, fontWeight: 700 }}>🛡 Filtered</span>
             )}
             {lastResult.cards?.length > 0 && (
-              <span style={{ fontSize: 10, background: '#1d4ed8', color: '#fff', padding: '2px 7px', borderRadius: 8 }}>
+              <span style={{ fontSize: 10, background: theme.accent, color: '#fff', padding: '2px 7px', borderRadius: 8 }}>
                 {lastResult.cards.length} cards
               </span>
             )}
           </div>
           {lastResult.agentLog?.map((log, i) => (
-            <div key={i} style={{ padding: '5px 0', borderBottom: `1px solid ${S.dividerColor}`, fontSize: 11 }}>
-              <span style={S.agentTag(log.agent)}>{log.agent}</span>
-              <span style={{ color: '#94a3b8' }}>{log.action}</span>
-              {log.tool && <span style={{ ...S.tag('#1e3a5f'), marginLeft: 4 }}>🛠 {log.tool}</span>}
-              {log.subAgent && <span style={{ ...S.tag('#3b1f5e'), marginLeft: 4 }}>→ {log.subAgent}</span>}
+            <div key={i} style={{ padding: '5px 0', borderBottom: `1px solid ${theme.border}`, fontSize: S.fs?.xs || 12 }}>
+              <span style={S.agentTag(log.agent)}>{log.agent?.replace('Agent', '')}</span>
+              <span style={{ color: theme.textFaint }}>{log.action}</span>
+              {log.tool && <span style={{ ...S.tag(theme.accentBg), color: theme.accent, marginLeft: 4 }}>🛠 {log.tool}</span>}
+              {log.subAgent && <span style={{ ...S.tag(theme.border), marginLeft: 4 }}>→ {log.subAgent?.replace('Agent', '')}</span>}
             </div>
           ))}
         </>
@@ -1799,19 +1905,24 @@ function VersionPanel() {
 }
 
 // ── Bottom Nav (mobile only) ──────────────────────────────────────────────────
+// Only show the 6 most important tabs on mobile bottom nav.
+// The rest are accessible via the hamburger sidebar.
+const MOBILE_TABS = ['overview', 'chat', 'mothers', 'appointments', 'shop', 'reminders'];
+
 const TABS = (t) => [
-  { id:'overview',      label: t.nav_overview,      short:'📊' },
-  { id:'analytics',     label: t.nav_analytics,     short:'📈' },
-  { id:'chat',          label: t.nav_chat,           short:'🤖' },
-  { id:'mothers',       label: t.nav_mothers,        short:'👩' },
-  { id:'appointments',  label: t.nav_appointments,   short:'🏥' },
-  { id:'reminders',     label: t.nav_reminders,      short:'🔔' },
-  { id:'shop',          label: t.nav_shop,           short:'🛍️' },
-  { id:'calendar',      label: t.nav_calendar,       short:'💉' },
-  { id:'delivery',      label: t.nav_delivery,       short:'📦' },
-  { id:'audit',         label: t.nav_audit,          short:'🔍' },
-  { id:'kits',          label: t.nav_kits,           short:'🛒' },
-  { id:'sessions',      label: t.nav_sessions,       short:'📋' },
+  { id:'overview',      label: t.nav_overview,      short:'📊', mobileLabel:'Home' },
+  { id:'analytics',     label: t.nav_analytics,     short:'📈', mobileLabel:'Stats' },
+  { id:'chat',          label: t.nav_chat,           short:'🤖', mobileLabel:'Chat' },
+  { id:'mothers',       label: t.nav_mothers,        short:'👩', mobileLabel:'Ibu' },
+  { id:'appointments',  label: t.nav_appointments,   short:'🏥', mobileLabel:'Dokter' },
+  { id:'reminders',     label: t.nav_reminders,      short:'🔔', mobileLabel:'Jadwal' },
+  { id:'shop',          label: t.nav_shop,           short:'🛍️', mobileLabel:'Toko' },
+  { id:'calendar',      label: t.nav_calendar,       short:'💉', mobileLabel:'Vaksin' },
+  { id:'delivery',      label: t.nav_delivery,       short:'📦', mobileLabel:'Kirim' },
+  { id:'audit',         label: t.nav_audit,          short:'🔍', mobileLabel:'Audit' },
+  { id:'kits',          label: t.nav_kits,           short:'🛒', mobileLabel:'Kit' },
+  { id:'sessions',      label: t.nav_sessions,       short:'📋', mobileLabel:'Log' },
+  { id:'version',       label: t.nav_version,        short:'⚙️', mobileLabel:'Info' },
 ];
 
 // ── Main App ──────────────────────────────────────────────────────────────────
@@ -1935,25 +2046,48 @@ export default function App() {
             {tab==='appointments'  && <Appointments mothers={mothers} />}
             {tab==='reminders'     && <Reminders mothers={mothers} />}
             {tab==='shop'          && <Shop mothers={mothers} />}
+            {tab==='version'       && <VersionPanel />}
           </div>
 
-          {/* Mobile bottom navigation */}
+          {/* Mobile bottom navigation — 6 primary tabs only, no horizontal scroll */}
           {bp === 'mobile' && (
-            <div style={{display:'flex', background:theme.surface, borderTop:`2px solid ${theme.border}`, position:'fixed', bottom:0, left:0, right:0, zIndex:100, overflowX:'auto', boxShadow:'0 -2px 12px rgba(0,0,0,0.1)'}}>
-              {tabs.map(tb => (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              background: theme.surface,
+              borderTop: `1px solid ${theme.border}`,
+              position: 'fixed', bottom: 0, left: 0, right: 0,
+              zIndex: 100,
+              boxShadow: '0 -2px 12px rgba(0,0,0,0.12)',
+            }}>
+              {tabs.filter(tb => MOBILE_TABS.includes(tb.id)).map(tb => (
                 <button key={tb.id} onClick={() => navigate(tb.id)} style={{
-                  flex:'0 0 auto', minWidth:58, padding:'8px 4px 6px',
-                  background: tab===tb.id ? theme.accentBg : 'transparent',
-                  border:'none',
-                  borderTop: tab===tb.id ? `3px solid ${theme.accent}` : '3px solid transparent',
-                  color: tab===tb.id ? theme.accent : theme.textMuted,
-                  cursor:'pointer', fontSize:20, display:'flex',
-                  flexDirection:'column', alignItems:'center', gap:2,
+                  padding: '7px 2px 5px',
+                  background: tab === tb.id ? theme.accentBg : 'transparent',
+                  border: 'none',
+                  borderTop: tab === tb.id ? `2px solid ${theme.accent}` : '2px solid transparent',
+                  color: tab === tb.id ? theme.accent : theme.textMuted,
+                  cursor: 'pointer', fontSize: 22, display: 'flex',
+                  flexDirection: 'column', alignItems: 'center', gap: 1,
                 }}>
                   <span>{tb.short}</span>
-                  <span style={{fontSize:9, whiteSpace:'nowrap', fontWeight: tab===tb.id ? 700 : 400}}>{tb.label.replace(/^[^\s]+\s/,'').slice(0,8)}</span>
+                  <span style={{ fontSize: 9, fontWeight: tab === tb.id ? 700 : 400, color: tab === tb.id ? theme.accent : theme.textMuted }}>
+                    {tb.mobileLabel}
+                  </span>
                 </button>
               ))}
+              {/* More button opens sidebar */}
+              <button onClick={() => setSidebarOpen(true)} style={{
+                padding: '7px 2px 5px',
+                background: 'transparent', border: 'none',
+                borderTop: '2px solid transparent',
+                color: theme.textMuted,
+                cursor: 'pointer', fontSize: 22, display: 'flex',
+                flexDirection: 'column', alignItems: 'center', gap: 1,
+              }}>
+                <span>☰</span>
+                <span style={{ fontSize: 9, fontWeight: 400 }}>More</span>
+              </button>
             </div>
           )}
         </div>
