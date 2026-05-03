@@ -71,6 +71,7 @@ function applySafetyFilter(text) {
 
 /**
  * Parse the FOLLOWUP_JSON block out of Gemini's response.
+ * Handles truncated JSON gracefully by extracting whatever questions are complete.
  * Returns { cleanText, followUpQuestions }
  */
 function parseFollowUp(rawText) {
@@ -80,11 +81,22 @@ function parseFollowUp(rawText) {
 
   const cleanText = rawText.slice(0, idx).trim();
   const jsonStr   = rawText.slice(idx + marker.length).trim();
+
+  // Try full parse first
   try {
     const parsed = JSON.parse(jsonStr);
     return { cleanText, followUpQuestions: parsed.questions || [] };
   } catch {
-    return { cleanText, followUpQuestions: [] };
+    // JSON was truncated — extract complete quoted strings manually
+    const questions = [];
+    const re = /"([^"]{3,80})"/g;
+    let m;
+    while ((m = re.exec(jsonStr)) !== null) {
+      const q = m[1].trim();
+      // Skip the key name "questions"
+      if (q !== 'questions' && q.length >= 5) questions.push(q);
+    }
+    return { cleanText, followUpQuestions: questions.slice(0, 4) };
   }
 }
 
@@ -117,7 +129,7 @@ function buildPayload(systemPrompt, conversationHistory, userMessage) {
   return {
     system_instruction: { parts: [{ text: systemPrompt }] },
     contents: [...conversationHistory, { role: 'user', parts: [{ text: userMessage }] }],
-    generationConfig: { temperature: 0.5, topP: 0.9, maxOutputTokens: 800 },
+    generationConfig: { temperature: 0.5, topP: 0.9, maxOutputTokens: 1200 },
     safetySettings: [
       { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
       { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
@@ -203,4 +215,4 @@ function buildContextBlock(mother, agentResults) {
   return lines.join('\n');
 }
 
-module.exports = { askGemini, applySafetyFilter, SYSTEM_PROMPT };
+module.exports = { askGemini, applySafetyFilter, SYSTEM_PROMPT, httpsPost, GEMINI_ENDPOINT_BASE, GEMINI_MODELS };

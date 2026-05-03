@@ -18,9 +18,64 @@ const appointmentAgent = require('./appointmentAgent');
 const reminderAgent = require('./reminderAgent');
 const shopAgent = require('./shopAgent');
 const tools = require('../tools/mcpTools');
-const { askGemini } = require('../services/geminiService');
+const { askGemini, httpsPost, GEMINI_ENDPOINT_BASE } = require('../services/geminiService');
 
-// ── Intent detection ─────────────────────────────────────────────────────────
+// ── Gemini-powered intent analysis ───────────────────────────────────────────
+/**
+ * Ask Gemini to classify the user's intent and extract key entities.
+ * Runs in parallel with keyword matching; results are merged.
+ * Returns { intents: string[], entities: object, confidence: string }
+ */
+async function analyzeIntentWithGemini(userInput, mother) {
+  if (!process.env.GEMINI_API_KEY) return null;
+
+  const INTENT_PROMPT = `You are an intent classifier for a maternal health app. Classify the user message into one or more of these intents:
+
+INTENTS:
+- general       : General health knowledge question (pregnancy tips, baby care, nutrition info, symptoms explanation)
+- nutrition     : User is LOGGING food they just ate (e.g. "saya makan daun kelor", "i ate moringa")
+- kit           : Requesting a health kit delivery
+- health        : Checking BPJS status, vaccination records, or health milestones
+- audit         : Requesting a full health audit of all mothers
+- appointment   : Booking a doctor/emergency appointment due to symptoms
+- reminder      : Asking to see vaccination schedule or set a reminder
+- shop          : Buying or browsing products (milk, diapers, biscuits, vitamins)
+
+Mother context: phase=${mother?.phase || 'unknown'}, region=${mother?.region || 'unknown'}
+
+User message: "${userInput}"
+
+Respond with ONLY this JSON (no other text):
+{"intents":["intent1"],"entities":{"food":"if mentioned","symptom":"if mentioned","product":"if mentioned"},"confidence":"high|medium|low"}`;
+
+  try {
+    const payload = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: INTENT_PROMPT }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 150 },
+    });
+
+    const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+    for (const model of models) {
+      const apiUrl = `${GEMINI_ENDPOINT_BASE}${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+      try {
+        const { status, body } = await httpsPost(apiUrl, payload);
+        if (status === 503 || status === 429 || status === 404) continue;
+        if (status !== 200) continue;
+
+        const raw = body.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        // Strip markdown fences if present
+        const jsonStr = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+        const parsed = JSON.parse(jsonStr);
+        return parsed;
+      } catch { continue; }
+    }
+  } catch (e) {
+    console.warn('[GuardianAgent] Intent analysis error:', e.message);
+  }
+  return null;
+}
+
+// ── Keyword intent detection (fast fallback) ──────────────────────────────────
 //
 // IMPORTANT DESIGN RULE:
 //   Intents only trigger sub-agents that perform ACTIONS (log food, book doctor,
@@ -141,14 +196,35 @@ const guardianAgent = {
 
     agentLog.push({ agent: 'GuardianAgent', action: 'session_started', sessionId, motherId, input: userInput });
 
-    // ── Step 1: Detect intents ────────────────────────────────────────────────
-    const intents  = detectIntents(userInput);
-    const symptoms = detectSymptoms(userInput);
-    agentLog.push({ agent: 'GuardianAgent', action: 'intents_detected', intents, symptoms });
-
-    // ── Step 2: Load mother context ───────────────────────────────────────────
+    // ── Step 1: Load mother context (needed for Gemini intent analysis) ───────
     const motherData = tools.database.getMother(motherId);
     agentLog.push({ agent: 'GuardianAgent', action: 'context_loaded', tool: 'database', mother: motherData.mother?.name });
+
+    // ── Step 2: Detect intents (keyword + Gemini in parallel) ────────────────
+    const [keywordIntents, geminiIntentResult] = await Promise.all([
+      Promise.resolve(detectIntents(userInput)),
+      analyzeIntentWithGemini(userInput, motherData.mother),
+    ]);
+
+    // Merge: Gemini intent takes priority when confidence is high/medium
+    let intents = keywordIntents;
+    if (geminiIntentResult?.intents?.length > 0 &&
+        geminiIntentResult.confidence !== 'low' &&
+        geminiIntentResult.intents[0] !== 'general') {
+      // Use Gemini intents but keep any keyword intents that Gemini missed
+      const merged = new Set([...geminiIntentResult.intents, ...keywordIntents]);
+      intents = [...merged].filter(i => i !== 'general' || merged.size === 1);
+      if (intents.length === 0) intents = ['general'];
+    }
+
+    const symptoms = detectSymptoms(userInput);
+    agentLog.push({
+      agent: 'GuardianAgent', action: 'intents_detected', intents, symptoms,
+      intentSource: geminiIntentResult ? 'gemini+keyword' : 'keyword',
+      geminiIntents: geminiIntentResult?.intents,
+      geminiEntities: geminiIntentResult?.entities,
+      geminiConfidence: geminiIntentResult?.confidence,
+    });
 
     // ── Step 3: Route to sub-agents ───────────────────────────────────────────
     for (const intent of intents) {
@@ -417,9 +493,17 @@ function buildFallbackText(intents, results, mother) {
   if (results.healthAudit) parts.push(`📋 ${results.healthAudit.summary}`);
   if (results.auditAll) parts.push(`📊 Audit: ${results.auditAll.totalMothers} ibu, ${results.auditAll.highRisk} risiko tinggi.`);
 
+  // If no structured results, give a helpful phase-specific response instead of generic greeting
   if (parts.length === 0) {
-    parts.push(`Halo ${name}! Saya Guardian Agent NutriSakti. Saya siap membantu Anda dengan informasi kesehatan ibu dan bayi, jadwal vaksinasi, reservasi dokter, atau belanja produk kebutuhan ibu dan bayi.`);
+    const phase = mother?.phase || 'pregnancy';
+    const tips = {
+      pregnancy: `Halo ${name}! Selama kehamilan, penting untuk:\n• Makan makanan bergizi (sayur, buah, protein)\n• Minum air putih 8 gelas/hari\n• Istirahat cukup dan hindari stres\n• Rutin periksa ke bidan atau dokter\n\nAda yang ingin Ibu tanyakan lebih lanjut?`,
+      infant:    `Halo ${name}! Untuk bayi 0-12 bulan:\n• ASI eksklusif hingga 6 bulan\n• Mulai MPASI di usia 6 bulan\n• Pantau tumbuh kembang rutin\n• Lengkapi imunisasi sesuai jadwal\n\nAda yang ingin Ibu tanyakan?`,
+      toddler:   `Halo ${name}! Untuk balita 1-2 tahun:\n• Berikan makanan beragam dan bergizi\n• Stimulasi tumbuh kembang setiap hari\n• Lengkapi imunisasi booster\n• Pantau berat dan tinggi badan rutin\n\nAda yang ingin Ibu tanyakan?`,
+    };
+    parts.push(tips[phase] || tips.pregnancy);
   }
+
   return parts.join('\n');
 }
 

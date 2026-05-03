@@ -66,3 +66,6 @@ export const getAnalyticsPhase          = () => fetch(`${BASE}/analytics/phase-d
 export const getAnalyticsAppointments   = () => fetch(`${BASE}/analytics/appointments-summary`).then(r => r.json());
 export const getAnalyticsShop           = () => fetch(`${BASE}/analytics/shop-performance`).then(r => r.json());
 export const getAnalyticsAgentActivity  = () => fetch(`${BASE}/analytics/agent-activity`).then(r => r.json());
+
+// ── Version / diagnostics ─────────────────────────────────────────────────────
+export const getVersion = () => fetch(`${BASE}/version`).then(r => r.json());

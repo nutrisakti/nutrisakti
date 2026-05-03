@@ -428,26 +428,27 @@ function AuditCard({ card, theme, S }) {
 export function FollowUpChips({ questions, onSelect, theme, S }) {
   if (!questions || questions.length === 0) return null;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
       {questions.map((q, i) => (
         <button
           key={i}
           onClick={() => onSelect(q)}
           style={{
-            background: 'transparent',
-            border: `1px solid #38bdf8`,
-            color: '#38bdf8',
-            borderRadius: 16,
-            padding: '4px 10px',
-            fontSize: S.isMobile ? 11 : 12,
+            background: theme.accentBg || 'transparent',
+            border: `1.5px solid ${theme.accent}`,
+            color: theme.accent,
+            borderRadius: 20,
+            padding: '6px 14px',
+            fontSize: S.fs?.sm || 13,
+            fontWeight: 600,
             cursor: 'pointer',
-            transition: 'all 0.15s',
             whiteSpace: 'nowrap',
+            transition: 'all 0.15s',
           }}
-          onMouseEnter={e => { e.target.style.background = '#38bdf8'; e.target.style.color = '#0f172a'; }}
-          onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#38bdf8'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = theme.accent; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = theme.accentBg || 'transparent'; e.currentTarget.style.color = theme.accent; }}
         >
-          {q}
+          💬 {q}
         </button>
       ))}
     </div>

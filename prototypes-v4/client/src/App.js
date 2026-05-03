@@ -31,66 +31,216 @@ const makeS = (theme, bp) => {
   const isTablet = bp === 'tablet';
   const isSmall  = isMobile || isTablet;
 
+  // Base font sizes — larger for family-friendly readability
+  const fs = {
+    xs:   isMobile ? 11 : 12,
+    sm:   isMobile ? 13 : 14,
+    base: isMobile ? 14 : 15,
+    md:   isMobile ? 15 : 16,
+    lg:   isMobile ? 17 : 19,
+    xl:   isMobile ? 20 : 24,
+    xxl:  isMobile ? 26 : 34,
+  };
+
   return {
-    // Layout
-    app:        { display:'flex', minHeight:'100vh', background:theme.bg, color:theme.text, fontFamily:'system-ui,-apple-system,sans-serif', position:'relative' },
-    sidebar:    { width: isMobile ? '100%' : isTablet ? 200 : 230, background:theme.surface, display:'flex', flexDirection:'column', borderRight:`1px solid ${theme.border}`, flexShrink:0, ...(isMobile ? { position:'fixed', top:0, left:0, height:'100%', zIndex:200, transform:'translateX(-100%)', transition:'transform 0.25s ease' } : {}) },
-    sidebarOpen:{ transform:'translateX(0)' },
-    overlay:    { display: isMobile ? 'block' : 'none', position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:199 },
-    logo:       { padding: isMobile ? '16px 20px 16px' : '20px 20px 20px', borderBottom:`1px solid ${theme.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' },
-    logoTitle:  { fontSize: isMobile ? 18 : 20, fontWeight:700, color:theme.accent },
-    logoSub:    { fontSize:11, color:theme.textFaint, marginTop:2 },
-    navBtn:     (active) => ({ display:'flex', alignItems:'center', padding: isSmall ? '10px 16px' : '10px 20px', cursor:'pointer', background: active ? theme.bg : 'transparent', color: active ? theme.accent : theme.textMuted, border:'none', width:'100%', textAlign:'left', fontSize: isSmall ? 13 : 13, borderLeft: active ? `3px solid ${theme.accent}` : '3px solid transparent', whiteSpace:'nowrap' }),
-    main:       { flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, ...(isMobile ? { paddingBottom: 64 } : {}) },
-    topbar:     { background:theme.surface, padding: isMobile ? '10px 16px' : '12px 24px', borderBottom:`1px solid ${theme.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexShrink:0 },
-    topbarLeft: { display:'flex', alignItems:'center', gap:10 },
-    topbarTitle:{ fontSize: isMobile ? 15 : 18, fontWeight:600, color:theme.text },
-    hamburger:  { display: isMobile ? 'flex' : 'none', background:'none', border:'none', color:theme.text, fontSize:22, cursor:'pointer', padding:'2px 6px', alignItems:'center' },
-    badge:      (color) => ({ background:color, color:'#fff', padding:'2px 8px', borderRadius:12, fontSize:11, fontWeight:600, whiteSpace:'nowrap' }),
-    content:    { flex:1, overflow:'auto', padding: isMobile ? 12 : isTablet ? 16 : 24 },
+    // ── Layout ──────────────────────────────────────────────────────────────
+    app: {
+      display: 'flex', minHeight: '100vh',
+      background: theme.bg, color: theme.text,
+      fontFamily: '"Nunito", "Segoe UI", system-ui, -apple-system, sans-serif',
+      fontSize: fs.base,
+      position: 'relative',
+    },
+    sidebar: {
+      width: isMobile ? '100%' : isTablet ? 220 : 256,
+      background: theme.sidebarGradient,
+      display: 'flex', flexDirection: 'column',
+      borderRight: 'none',
+      flexShrink: 0,
+      boxShadow: isMobile ? 'none' : '2px 0 12px rgba(0,0,0,0.15)',
+      ...(isMobile ? {
+        position: 'fixed', top: 0, left: 0, height: '100%',
+        zIndex: 200, transform: 'translateX(-100%)',
+        transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+      } : {}),
+    },
+    sidebarOpen: { transform: 'translateX(0)' },
+    overlay:     { display: isMobile ? 'block' : 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 199 },
 
-    // Cards & grids
-    grid2:      { display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 10 : 16, marginBottom: isMobile ? 10 : 16 },
-    grid3:      { display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : isTablet ? '1fr 1fr 1fr' : '1fr 1fr 1fr', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 10 : 16 },
-    grid5:      { display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5,1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 10 : 16 },
-    card:       { background:theme.surface, borderRadius: isMobile ? 10 : 12, padding: isMobile ? 14 : 20, border:`1px solid ${theme.border}` },
-    cardTitle:  { fontSize:11, color:theme.textFaint, marginBottom:8, textTransform:'uppercase', letterSpacing:1 },
-    stat:       { fontSize: isMobile ? 26 : 32, fontWeight:700, color:theme.statColor },
-    statSub:    { fontSize:11, color:theme.textFaint, marginTop:4 },
+    logo: {
+      padding: isMobile ? '20px 20px 16px' : '24px 20px 20px',
+      borderBottom: `1px solid ${theme.sidebarBorder}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    },
+    logoTitle: { fontSize: isMobile ? 20 : 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' },
+    logoSub:   { fontSize: fs.xs, color: theme.sidebarMuted, marginTop: 3, fontWeight: 500 },
 
-    // Table (scrollable on mobile)
-    tableWrap:  { overflowX:'auto', WebkitOverflowScrolling:'touch' },
-    table:      { width:'100%', borderCollapse:'collapse', minWidth: isMobile ? 500 : 'auto' },
-    th:         { textAlign:'left', padding: isMobile ? '6px 10px' : '8px 12px', fontSize:11, color:theme.textFaint, borderBottom:`1px solid ${theme.border}`, textTransform:'uppercase', whiteSpace:'nowrap' },
-    td:         { padding: isMobile ? '8px 10px' : '10px 12px', fontSize: isMobile ? 12 : 13, borderBottom:`1px solid ${theme.border}`, verticalAlign:'middle', color:theme.text },
+    navBtn: (active) => ({
+      display: 'flex', alignItems: 'center',
+      padding: isSmall ? '12px 18px' : '11px 20px',
+      cursor: 'pointer',
+      background: active ? theme.sidebarActive : 'transparent',
+      color: active ? '#fff' : theme.sidebarMuted,
+      border: 'none', width: '100%', textAlign: 'left',
+      fontSize: isSmall ? fs.sm : fs.sm,
+      fontWeight: active ? 700 : 500,
+      borderLeft: active ? '3px solid #fff' : '3px solid transparent',
+      borderRadius: active ? '0 8px 8px 0' : 0,
+      whiteSpace: 'nowrap',
+      transition: 'all 0.15s ease',
+      letterSpacing: '0.1px',
+    }),
 
-    // Badges & buttons
-    riskBadge:  (r) => ({ padding:'2px 8px', borderRadius:8, fontSize:11, fontWeight:600, background: r==='high'?'#7f1d1d': r==='medium'?'#78350f':'#14532d', color: r==='high'?'#fca5a5': r==='medium'?'#fcd34d':'#86efac' }),
-    btn:        (color) => ({ background: color || theme.accent, color:'#fff', border:'none', padding: isMobile ? '8px 14px' : '8px 16px', borderRadius:8, cursor:'pointer', fontSize: isMobile ? 13 : 13, fontWeight:600, whiteSpace:'nowrap' }),
-    btnSm:      (color) => ({ background: color || theme.border, color: color ? '#fff' : theme.text, border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }),
-    input:      { background:theme.inputBg, border:`1px solid ${theme.border}`, color:theme.text, padding: isMobile ? '8px 12px' : '10px 14px', borderRadius:8, fontSize: isMobile ? 14 : 14, width:'100%', outline:'none', boxSizing:'border-box' },
-    select:     { background:theme.inputBg, border:`1px solid ${theme.border}`, color:theme.text, padding: isMobile ? '6px 10px' : '8px 12px', borderRadius:8, fontSize:13, outline:'none' },
+    main: {
+      flex: 1, display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', minWidth: 0,
+      ...(isMobile ? { paddingBottom: 68 } : {}),
+    },
+    topbar: {
+      background: theme.surface,
+      padding: isMobile ? '12px 16px' : '14px 28px',
+      borderBottom: `2px solid ${theme.border}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: 10, flexShrink: 0,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    },
+    topbarLeft:  { display: 'flex', alignItems: 'center', gap: 12 },
+    topbarTitle: { fontSize: isMobile ? fs.md : fs.lg, fontWeight: 700, color: theme.text },
+    hamburger:   { display: isMobile ? 'flex' : 'none', background: 'none', border: 'none', color: theme.text, fontSize: 24, cursor: 'pointer', padding: '2px 4px', alignItems: 'center' },
+    badge:       (color) => ({ background: color, color: '#fff', padding: '3px 10px', borderRadius: 20, fontSize: fs.xs, fontWeight: 700, whiteSpace: 'nowrap' }),
+    content:     { flex: 1, overflow: 'auto', padding: isMobile ? 14 : isTablet ? 20 : 28 },
 
-    // Chat
-    chatBubble: (isUser) => ({ alignSelf: isUser?'flex-end':'flex-start', background: isUser ? theme.accent : theme.surface, color: isUser ? '#fff' : theme.text, padding:'10px 14px', borderRadius:12, maxWidth: isMobile ? '90%' : '80%', fontSize: isMobile ? 13 : 13, lineHeight:1.5, border:`1px solid ${theme.border}`, whiteSpace:'pre-wrap', wordBreak:'break-word' }),
-    agentTag:   (name) => ({ display:'inline-block', padding:'1px 6px', borderRadius:4, fontSize:10, fontWeight:700, marginRight:4, background: name==='GuardianAgent'?'#2e7d32': name==='NutritionAgent'?'#1b5e20': name==='LogisticsAgent'?'#4a148c': name==='AppointmentAgent'?'#b71c1c': name==='ReminderAgent'?'#e65100': name==='ShopAgent'?'#006064':'#37474f', color:'#fff' }),
-    tag:        (color) => ({ display:'inline-block', padding:'2px 8px', borderRadius:6, fontSize:11, background: color || theme.border, color:'#e2e8f0', marginRight:4 }),
+    // ── Cards & grids ────────────────────────────────────────────────────────
+    grid2: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 18, marginBottom: isMobile ? 12 : 18 },
+    grid3: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: isMobile ? 10 : 14, marginBottom: isMobile ? 12 : 18 },
+    grid5: { display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5,1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 12 : 18 },
 
-    // Filter bar
-    filterBar:  { display:'flex', gap: isMobile ? 8 : 10, flexWrap:'wrap', alignItems:'flex-end' },
-    filterGroup:{ display:'flex', flexDirection:'column', gap:4 },
-    filterLabel:{ fontSize:11, color:theme.textFaint },
-    filterBtns: { display:'flex', gap:4, flexWrap:'wrap' },
+    card: {
+      background: theme.surface,
+      borderRadius: isMobile ? 14 : 16,
+      padding: isMobile ? 16 : 22,
+      border: `1px solid ${theme.border}`,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    },
+    cardTitle: {
+      fontSize: fs.xs, color: theme.textFaint, marginBottom: 10,
+      textTransform: 'uppercase', letterSpacing: 1.2, fontWeight: 700,
+    },
+    stat:    { fontSize: isMobile ? fs.xxl : 38, fontWeight: 800, color: theme.statColor, lineHeight: 1 },
+    statSub: { fontSize: fs.sm, color: theme.textMuted, marginTop: 6 },
 
-    // Misc
+    // ── Table ────────────────────────────────────────────────────────────────
+    tableWrap: { overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
+    table:     { width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? 520 : 'auto' },
+    th: {
+      textAlign: 'left', padding: isMobile ? '8px 12px' : '10px 14px',
+      fontSize: fs.xs, color: theme.textFaint,
+      borderBottom: `2px solid ${theme.border}`,
+      textTransform: 'uppercase', whiteSpace: 'nowrap',
+      fontWeight: 700, letterSpacing: 0.8,
+      background: theme.surfaceAlt || theme.surface,
+    },
+    td: {
+      padding: isMobile ? '10px 12px' : '12px 14px',
+      fontSize: fs.sm,
+      borderBottom: `1px solid ${theme.border}`,
+      verticalAlign: 'middle', color: theme.text,
+      lineHeight: 1.5,
+    },
+
+    // ── Badges & buttons ─────────────────────────────────────────────────────
+    riskBadge: (r) => ({
+      padding: '3px 10px', borderRadius: 20, fontSize: fs.xs, fontWeight: 700,
+      background: r === 'high' ? theme.dangerBg  : r === 'medium' ? theme.warningBg  : theme.successBg,
+      color:      r === 'high' ? theme.danger     : r === 'medium' ? theme.warning     : theme.success,
+      border:     `1px solid ${r === 'high' ? theme.danger : r === 'medium' ? theme.warning : theme.success}`,
+    }),
+    btn: (color) => ({
+      background: color || theme.accent,
+      color: '#fff', border: 'none',
+      padding: isMobile ? '10px 18px' : '10px 20px',
+      borderRadius: 10, cursor: 'pointer',
+      fontSize: fs.base, fontWeight: 700,
+      whiteSpace: 'nowrap',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+      transition: 'opacity 0.15s',
+    }),
+    btnSm: (color) => ({
+      background: color || theme.border,
+      color: color ? '#fff' : theme.text,
+      border: 'none', padding: '6px 14px',
+      borderRadius: 8, cursor: 'pointer',
+      fontSize: fs.sm, fontWeight: 600,
+      whiteSpace: 'nowrap',
+    }),
+    input: {
+      background: theme.inputBg,
+      border: `1.5px solid ${theme.border}`,
+      color: theme.text,
+      padding: isMobile ? '10px 14px' : '11px 16px',
+      borderRadius: 10, fontSize: fs.base,
+      width: '100%', outline: 'none',
+      boxSizing: 'border-box',
+      lineHeight: 1.5,
+    },
+    select: {
+      background: theme.inputBg,
+      border: `1.5px solid ${theme.border}`,
+      color: theme.text,
+      padding: isMobile ? '8px 12px' : '9px 14px',
+      borderRadius: 10, fontSize: fs.sm,
+      outline: 'none',
+    },
+
+    // ── Chat ─────────────────────────────────────────────────────────────────
+    chatBubble: (isUser) => ({
+      alignSelf: isUser ? 'flex-end' : 'flex-start',
+      background: isUser ? theme.accent : theme.surface,
+      color: isUser ? '#fff' : theme.text,
+      padding: '12px 16px',
+      borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+      maxWidth: isMobile ? '88%' : '78%',
+      fontSize: fs.base,
+      lineHeight: 1.65,
+      border: isUser ? 'none' : `1px solid ${theme.border}`,
+      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+    }),
+    agentTag: (name) => ({
+      display: 'inline-block', padding: '2px 8px',
+      borderRadius: 6, fontSize: fs.xs, fontWeight: 700, marginRight: 4,
+      background:
+        name === 'GuardianAgent'    ? theme.accent :
+        name === 'NutritionAgent'   ? theme.success :
+        name === 'LogisticsAgent'   ? '#7c3aed' :
+        name === 'AppointmentAgent' ? theme.danger :
+        name === 'ReminderAgent'    ? theme.warning :
+        name === 'ShopAgent'        ? '#0891b2' : theme.textMuted,
+      color: '#fff',
+    }),
+    tag: (color) => ({
+      display: 'inline-block', padding: '3px 10px',
+      borderRadius: 8, fontSize: fs.xs,
+      background: color || theme.border,
+      color: '#fff', marginRight: 4,
+    }),
+
+    // ── Filter bar ───────────────────────────────────────────────────────────
+    filterBar:   { display: 'flex', gap: isMobile ? 10 : 12, flexWrap: 'wrap', alignItems: 'flex-end' },
+    filterGroup: { display: 'flex', flexDirection: 'column', gap: 5 },
+    filterLabel: { fontSize: fs.sm, color: theme.textMuted, fontWeight: 600 },
+    filterBtns:  { display: 'flex', gap: 5, flexWrap: 'wrap' },
+
+    // ── Misc ─────────────────────────────────────────────────────────────────
     dividerColor: theme.border,
     isMobile, isTablet, isSmall,
+    fs, // expose font sizes for use in components
   };
 };
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 function Overview({ mothers, alerts }) {
-  const { t, S } = useApp();
+  const { t, S, theme } = useApp();
   const high   = mothers.filter(m => m.risk_level === 'high').length;
   const noBpjs = mothers.filter(m => !m.bpjs_status).length;
   const phases = { pregnancy:0, infant:0, toddler:0 };
@@ -98,23 +248,51 @@ function Overview({ mothers, alerts }) {
 
   return (
     <div>
+      {/* Welcome banner */}
+      <div style={{
+        background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accentLight || theme.accent} 100%)`,
+        borderRadius: 16, padding: S.isMobile ? '18px 20px' : '22px 28px',
+        marginBottom: S.isMobile ? 14 : 20, color: '#fff',
+        boxShadow: '0 4px 16px rgba(13,115,119,0.25)',
+      }}>
+        <div style={{fontSize: S.isMobile ? 22 : 26, fontWeight: 800, marginBottom: 4}}>
+          🌱 Selamat Datang di NutriSakti
+        </div>
+        <div style={{fontSize: S.fs?.base || 15, opacity: 0.9}}>
+          Platform kesehatan ibu & anak — 1000 Hari Pertama Kehidupan
+        </div>
+        <div style={{display:'flex', gap:16, marginTop:14, flexWrap:'wrap'}}>
+          {[
+            { icon:'👩', val: mothers.length, label:'Total Ibu' },
+            { icon:'🔴', val: high,           label:'Risiko Tinggi' },
+            { icon:'🛡', val: mothers.filter(m=>m.bpjs_status).length, label:'BPJS Aktif' },
+          ].map(s => (
+            <div key={s.label} style={{background:'rgba(255,255,255,0.18)', borderRadius:10, padding:'8px 16px', textAlign:'center', minWidth:70}}>
+              <div style={{fontSize:20}}>{s.icon}</div>
+              <div style={{fontSize: S.isMobile ? 22 : 26, fontWeight:800, lineHeight:1}}>{s.val}</div>
+              <div style={{fontSize:11, opacity:0.85, marginTop:2}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div style={S.grid3}>
         <div style={S.card}><div style={S.cardTitle}>{t.total_mothers}</div><div style={S.stat}>{mothers.length}</div><div style={S.statSub}>{t.registered}</div></div>
-        <div style={S.card}><div style={S.cardTitle}>{t.high_risk}</div><div style={{...S.stat,color:'#f87171'}}>{high}</div><div style={S.statSub}>{t.needs_attention}</div></div>
-        <div style={S.card}><div style={S.cardTitle}>{t.no_bpjs}</div><div style={{...S.stat,color:'#fbbf24'}}>{noBpjs}</div><div style={S.statSub}>{t.not_registered}</div></div>
+        <div style={{...S.card, borderLeft:`4px solid ${theme.danger}`}}><div style={S.cardTitle}>{t.high_risk}</div><div style={{...S.stat,color:theme.danger}}>{high}</div><div style={S.statSub}>{t.needs_attention}</div></div>
+        <div style={{...S.card, borderLeft:`4px solid ${theme.warning}`}}><div style={S.cardTitle}>{t.no_bpjs}</div><div style={{...S.stat,color:theme.warning}}>{noBpjs}</div><div style={S.statSub}>{t.not_registered}</div></div>
       </div>
       <div style={S.grid3}>
-        <div style={S.card}><div style={S.cardTitle}>{t.pregnant}</div><div style={S.stat}>{phases.pregnancy}</div></div>
-        <div style={S.card}><div style={S.cardTitle}>{t.infant}</div><div style={S.stat}>{phases.infant}</div></div>
-        <div style={S.card}><div style={S.cardTitle}>{t.toddler}</div><div style={S.stat}>{phases.toddler}</div></div>
+        <div style={{...S.card, textAlign:'center'}}><div style={{fontSize:28, marginBottom:6}}>🤰</div><div style={S.cardTitle}>{t.pregnant}</div><div style={{...S.stat, fontSize: S.isMobile ? 28 : 36}}>{phases.pregnancy}</div></div>
+        <div style={{...S.card, textAlign:'center'}}><div style={{fontSize:28, marginBottom:6}}>👶</div><div style={S.cardTitle}>{t.infant}</div><div style={{...S.stat, fontSize: S.isMobile ? 28 : 36}}>{phases.infant}</div></div>
+        <div style={{...S.card, textAlign:'center'}}><div style={{fontSize:28, marginBottom:6}}>🧒</div><div style={S.cardTitle}>{t.toddler}</div><div style={{...S.stat, fontSize: S.isMobile ? 28 : 36}}>{phases.toddler}</div></div>
       </div>
       <div style={S.card}>
         <div style={S.cardTitle}>{t.active_alerts} ({alerts.length})</div>
-        {alerts.length === 0 && <div style={{color:S.filterLabel.color,fontSize:13}}>{t.no_alerts}</div>}
+        {alerts.length === 0 && <div style={{color:theme.success, fontSize: S.fs?.base || 15, padding:'8px 0'}}>✅ {t.no_alerts}</div>}
         {alerts.slice(0,5).map((a,i) => (
-          <div key={i} style={{padding:'8px 0', borderBottom:`1px solid ${S.dividerColor}`, fontSize: S.isMobile ? 12 : 13, display:'flex', gap:8, alignItems:'flex-start', flexWrap:'wrap'}}>
-            <span style={S.badge(a.severity==='high'?'#dc2626':a.severity==='warning'?'#d97706':'#0284c7')}>{a.severity}</span>
-            <span style={{color:'#94a3b8',fontSize:11,minWidth:70}}>{a.type}</span>
+          <div key={i} style={{padding:'10px 0', borderBottom:`1px solid ${theme.border}`, fontSize: S.fs?.sm || 14, display:'flex', gap:10, alignItems:'flex-start', flexWrap:'wrap'}}>
+            <span style={S.badge(a.severity==='high'?theme.danger:a.severity==='warning'?theme.warning:theme.accent)}>{a.severity}</span>
+            <span style={{color:theme.textMuted,fontSize: S.fs?.xs || 12,minWidth:70}}>{a.type}</span>
             <span style={{flex:1,minWidth:0,wordBreak:'break-word'}}>{a.message}</span>
           </div>
         ))}
@@ -1448,6 +1626,178 @@ function Analytics() {
 // helper used inside Analytics
 function pct(n, d) { return d === 0 ? 0 : Math.round((n / d) * 100); }
 
+// ── Version / Diagnostics Panel ───────────────────────────────────────────────
+function VersionPanel() {
+  const { S, theme } = useApp();
+  const [info, setInfo]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+  const [copied, setCopied]   = useState(false);
+
+  const load = () => {
+    setLoading(true); setError(null);
+    api.getVersion()
+      .then(d => { setInfo(d); setLoading(false); })
+      .catch(e => { setError(e.message); setLoading(false); });
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const copyReport = () => {
+    if (!info) return;
+    const lines = [
+      '=== NutriSakti Version Report ===',
+      `Server version:  ${info.server?.version}`,
+      `Build time:      ${info.server?.buildTime}`,
+      `Git commit:      ${info.server?.gitCommit}`,
+      `Node.js:         ${info.server?.nodeVersion}`,
+      `Environment:     ${info.server?.environment}`,
+      `Uptime:          ${info.server?.uptimeHuman}`,
+      `Memory:          ${info.server?.memoryMB} MB`,
+      '',
+      `Client version:  ${process.env.REACT_APP_VERSION || '4.0.0'}`,
+      `Client build:    ${process.env.REACT_APP_BUILD_TIME || 'local dev'}`,
+      `Client commit:   ${process.env.REACT_APP_GIT_COMMIT || 'local'}`,
+      '',
+      '=== Services ===',
+      `Gemini API key:  ${info.checks?.geminiApiKey ? '✅ Configured' : '❌ NOT SET'}`,
+      `Gemini models:   ${info.services?.gemini?.models?.join(', ')}`,
+      `Agents:          ${info.services?.agents?.join(', ')}`,
+      `MCP Tools:       ${info.services?.mcpTools?.join(', ')}`,
+      '',
+      '=== Features ===',
+      ...(info.services?.features || []).map(f => `  ✅ ${f}`),
+      '',
+      `Generated: ${new Date().toISOString()}`,
+    ];
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const Check = ({ ok, label, detail }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${theme.border}` }}>
+      <span style={{ fontSize:18, flexShrink:0 }}>{ok ? '✅' : '❌'}</span>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize: S.fs?.base || 15, fontWeight:600, color: ok ? theme.success : theme.danger }}>{label}</div>
+        {detail && <div style={{ fontSize: S.fs?.xs || 12, color:theme.textMuted, marginTop:2 }}>{detail}</div>}
+      </div>
+    </div>
+  );
+
+  const InfoRow = ({ label, value, mono }) => (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:`1px solid ${theme.border}`, gap:12 }}>
+      <span style={{ fontSize: S.fs?.sm || 14, color:theme.textMuted, flexShrink:0 }}>{label}</span>
+      <span style={{ fontSize: S.fs?.sm || 14, fontWeight:600, color:theme.text, fontFamily: mono ? 'monospace' : 'inherit', textAlign:'right', wordBreak:'break-all' }}>{value ?? '—'}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 720, margin:'0 auto' }}>
+
+      {/* Header */}
+      <div style={{ ...S.card, marginBottom:16, background:`linear-gradient(135deg, ${theme.accent}, ${theme.accentLight || theme.accent})`, border:'none' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 }}>
+          <div>
+            <div style={{ fontSize: S.isMobile ? 18 : 22, fontWeight:800, color:'#fff' }}>🔍 Version & Diagnostics</div>
+            <div style={{ fontSize: S.fs?.sm || 14, color:'rgba(255,255,255,0.8)', marginTop:4 }}>
+              Paste this report when verifying your deployment
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button style={{ ...S.btnSm('#ffffff33'), color:'#fff', border:'1px solid rgba(255,255,255,0.4)' }} onClick={load}>↺ Refresh</button>
+            <button style={{ ...S.btnSm(copied ? '#15803d' : '#ffffff33'), color:'#fff', border:'1px solid rgba(255,255,255,0.4)' }} onClick={copyReport}>
+              {copied ? '✅ Copied!' : '📋 Copy Report'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ ...S.card, textAlign:'center', padding:40, color:theme.textMuted }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>⏳</div>
+          <div style={{ fontSize: S.fs?.base || 15 }}>Checking server...</div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ ...S.card, borderLeft:`4px solid ${theme.danger}`, marginBottom:16 }}>
+          <div style={{ fontSize: S.fs?.md || 16, fontWeight:700, color:theme.danger, marginBottom:6 }}>❌ Cannot reach server</div>
+          <div style={{ fontSize: S.fs?.sm || 14, color:theme.textMuted, fontFamily:'monospace' }}>{error}</div>
+          <div style={{ fontSize: S.fs?.sm || 14, color:theme.textMuted, marginTop:8 }}>
+            Make sure the server is running and accessible at <code>/api/version</code>
+          </div>
+        </div>
+      )}
+
+      {info && !loading && (
+        <>
+          {/* Health checks */}
+          <div style={{ ...S.card, marginBottom:16 }}>
+            <div style={{ ...S.cardTitle, marginBottom:12 }}>🩺 Health Checks</div>
+            <Check ok={true}                        label="Server reachable"          detail={`Responded in < 1s`} />
+            <Check ok={info.checks?.dotenvLoaded}   label="Environment variables loaded" detail={info.checks?.dotenvLoaded ? 'dotenv loaded successfully' : 'GEMINI_API_KEY not in environment'} />
+            <Check ok={info.checks?.geminiApiKey}   label="Gemini API key configured" detail={info.services?.gemini?.keyPrefix ? `Key: ${info.services.gemini.keyPrefix}` : 'Set GEMINI_API_KEY in server/.env or Cloud Run env vars'} />
+            <Check ok={info.services?.agents?.length > 0} label="All agents loaded"  detail={info.services?.agents?.join(', ')} />
+          </div>
+
+          {/* Server info */}
+          <div style={{ display:'grid', gridTemplateColumns: S.isMobile ? '1fr' : '1fr 1fr', gap:16, marginBottom:16 }}>
+            <div style={S.card}>
+              <div style={{ ...S.cardTitle, marginBottom:12 }}>🖥 Server</div>
+              <InfoRow label="Version"     value={info.server?.version} />
+              <InfoRow label="Build time"  value={info.server?.buildTime ? new Date(info.server.buildTime).toLocaleString() : '—'} />
+              <InfoRow label="Git commit"  value={info.server?.gitCommit} mono />
+              <InfoRow label="Node.js"     value={info.server?.nodeVersion} />
+              <InfoRow label="Environment" value={info.server?.environment} />
+              <InfoRow label="Uptime"      value={info.server?.uptimeHuman} />
+              <InfoRow label="Memory"      value={`${info.server?.memoryMB} MB`} />
+            </div>
+
+            <div style={S.card}>
+              <div style={{ ...S.cardTitle, marginBottom:12 }}>💻 Client</div>
+              <InfoRow label="Version"    value={process.env.REACT_APP_VERSION || '4.0.0'} />
+              <InfoRow label="Build time" value={process.env.REACT_APP_BUILD_TIME ? new Date(process.env.REACT_APP_BUILD_TIME).toLocaleString() : 'Local dev build'} />
+              <InfoRow label="Git commit" value={process.env.REACT_APP_GIT_COMMIT || 'local'} mono />
+              <InfoRow label="React"      value="18.2.0" />
+              <InfoRow label="Build env"  value={process.env.NODE_ENV} />
+            </div>
+          </div>
+
+          {/* Gemini models */}
+          <div style={{ ...S.card, marginBottom:16 }}>
+            <div style={{ ...S.cardTitle, marginBottom:12 }}>✦ Gemini AI</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
+              {info.services?.gemini?.models?.map((m, i) => (
+                <span key={m} style={{ background: i === 0 ? theme.accent : theme.border, color: i === 0 ? '#fff' : theme.text, padding:'4px 12px', borderRadius:20, fontSize: S.fs?.sm || 14, fontWeight:600 }}>
+                  {i === 0 ? '⭐ ' : ''}{m}
+                </span>
+              ))}
+            </div>
+            <div style={{ fontSize: S.fs?.xs || 12, color:theme.textMuted }}>
+              Models are tried in order. If the primary is rate-limited (429) or overloaded (503), the next model is used automatically.
+            </div>
+          </div>
+
+          {/* Features */}
+          <div style={S.card}>
+            <div style={{ ...S.cardTitle, marginBottom:12 }}>🚀 Active Features</div>
+            <div style={{ display:'grid', gridTemplateColumns: S.isMobile ? '1fr' : '1fr 1fr', gap:4 }}>
+              {info.services?.features?.map(f => (
+                <div key={f} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize: S.fs?.sm || 14 }}>
+                  <span style={{ color:theme.success, fontSize:16 }}>✅</span>
+                  <span style={{ color:theme.text }}>{f.replace(/_/g, ' ')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Bottom Nav (mobile only) ──────────────────────────────────────────────────
 const TABS = (t) => [
   { id:'overview',      label: t.nav_overview,      short:'📊' },
@@ -1518,7 +1868,7 @@ export default function App() {
               <div style={S.logoSub}>{t.app_subtitle}</div>
             </div>
             {bp === 'mobile' && (
-              <button style={{background:'none',border:'none',color:theme.textMuted,fontSize:20,cursor:'pointer'}} onClick={()=>setSidebarOpen(false)}>✕</button>
+              <button style={{background:'none',border:'none',color:'rgba(255,255,255,0.7)',fontSize:22,cursor:'pointer'}} onClick={()=>setSidebarOpen(false)}>✕</button>
             )}
           </div>
 
@@ -1531,24 +1881,24 @@ export default function App() {
           </div>
 
           {/* Settings */}
-          <div style={{padding:'16px 20px', borderTop:`1px solid ${theme.border}`, flexShrink:0}}>
-            <div style={{fontSize:11, color:theme.textFaint, marginBottom:10, textTransform:'uppercase', letterSpacing:1}}>{t.settings}</div>
+          <div style={{padding:'16px 20px', borderTop:`1px solid ${theme.sidebarBorder}`, flexShrink:0}}>
+            <div style={{fontSize:11, color:theme.sidebarMuted, marginBottom:10, textTransform:'uppercase', letterSpacing:1, fontWeight:700}}>{t.settings}</div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10}}>
-              <span style={{fontSize:12, color:theme.textMuted}}>{t.language}</span>
-              <button onClick={toggleLang} style={{background:theme.border, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer', fontSize:12, color:theme.text, fontWeight:600}}>
+              <span style={{fontSize:13, color:theme.sidebarMuted}}>{t.language}</span>
+              <button onClick={toggleLang} style={{background:'rgba(255,255,255,0.15)', border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', fontSize:12, color:'#fff', fontWeight:700}}>
                 {lang==='en' ? '🇬🇧 EN' : '🇮🇩 ID'}
               </button>
             </div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14}}>
-              <span style={{fontSize:12, color:theme.textMuted}}>{t.theme}</span>
-              <button onClick={toggleTheme} style={{background: isDark?'#334155':'#e2e8f0', border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer', fontSize:12, color:theme.text, fontWeight:600}}>
+              <span style={{fontSize:13, color:theme.sidebarMuted}}>{t.theme}</span>
+              <button onClick={toggleTheme} style={{background:'rgba(255,255,255,0.15)', border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer', fontSize:12, color:'#fff', fontWeight:700}}>
                 {isDark ? '🌙 Dark' : '☀️ Light'}
               </button>
             </div>
-            <div style={{paddingTop:12, borderTop:`1px solid ${theme.border}`}}>
-              <div style={{fontSize:11, color:theme.textFaint, marginBottom:4}}>MCP Tools</div>
+            <div style={{paddingTop:12, borderTop:`1px solid ${theme.sidebarBorder}`}}>
+              <div style={{fontSize:11, color:theme.sidebarMuted, marginBottom:4, fontWeight:700}}>MCP Tools</div>
               {['calendar','database','blockchain','whatsapp','gemini'].map(tool => (
-                <div key={tool} style={{fontSize:11, color:theme.accent, padding:'2px 0'}}>🛠 {tool}</div>
+                <div key={tool} style={{fontSize:11, color:'rgba(255,255,255,0.6)', padding:'2px 0'}}>🛠 {tool}</div>
               ))}
             </div>
           </div>
@@ -1589,16 +1939,19 @@ export default function App() {
 
           {/* Mobile bottom navigation */}
           {bp === 'mobile' && (
-            <div style={{display:'flex', background:theme.surface, borderTop:`1px solid ${theme.border}`, position:'fixed', bottom:0, left:0, right:0, zIndex:100, overflowX:'auto'}}>
+            <div style={{display:'flex', background:theme.surface, borderTop:`2px solid ${theme.border}`, position:'fixed', bottom:0, left:0, right:0, zIndex:100, overflowX:'auto', boxShadow:'0 -2px 12px rgba(0,0,0,0.1)'}}>
               {tabs.map(tb => (
                 <button key={tb.id} onClick={() => navigate(tb.id)} style={{
-                  flex:'0 0 auto', minWidth:56, padding:'8px 4px', background: tab===tb.id ? theme.bg : 'transparent',
-                  border:'none', borderTop: tab===tb.id ? `2px solid ${theme.accent}` : '2px solid transparent',
-                  color: tab===tb.id ? theme.accent : theme.textMuted, cursor:'pointer', fontSize:20, display:'flex',
+                  flex:'0 0 auto', minWidth:58, padding:'8px 4px 6px',
+                  background: tab===tb.id ? theme.accentBg : 'transparent',
+                  border:'none',
+                  borderTop: tab===tb.id ? `3px solid ${theme.accent}` : '3px solid transparent',
+                  color: tab===tb.id ? theme.accent : theme.textMuted,
+                  cursor:'pointer', fontSize:20, display:'flex',
                   flexDirection:'column', alignItems:'center', gap:2,
                 }}>
                   <span>{tb.short}</span>
-                  <span style={{fontSize:9, whiteSpace:'nowrap'}}>{tb.label.replace(/^[^\s]+\s/,'').slice(0,8)}</span>
+                  <span style={{fontSize:9, whiteSpace:'nowrap', fontWeight: tab===tb.id ? 700 : 400}}>{tb.label.replace(/^[^\s]+\s/,'').slice(0,8)}</span>
                 </button>
               ))}
             </div>
