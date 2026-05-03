@@ -29,48 +29,53 @@ const { askGemini, httpsPost, GEMINI_ENDPOINT_BASE } = require('../services/gemi
 async function analyzeIntentWithGemini(userInput, mother) {
   if (!process.env.GEMINI_API_KEY) return null;
 
-  const INTENT_PROMPT = `You are an intent classifier for a maternal health app. Classify the user message into one or more of these intents:
-
-INTENTS:
-- general       : General health knowledge question (pregnancy tips, baby care, nutrition info, symptoms explanation)
-- nutrition     : User is LOGGING food they just ate (e.g. "saya makan daun kelor", "i ate moringa")
+  const SYSTEM = `You are an intent classifier for NutriSakti, a maternal health app.
+Classify the user message into one or more intents from this list:
+- general       : General health knowledge question
+- nutrition     : User logging food they just ate
 - kit           : Requesting a health kit delivery
-- health        : Checking BPJS status, vaccination records, or health milestones
-- audit         : Requesting a full health audit of all mothers
-- appointment   : Booking a doctor/emergency appointment due to symptoms
-- reminder      : Asking to see vaccination schedule or set a reminder
-- shop          : Buying or browsing products (milk, diapers, biscuits, vitamins)
+- health        : Checking BPJS/vaccination records
+- audit         : Full health audit request
+- appointment   : Booking or scheduling a doctor/clinic visit, OR reporting symptoms that need a doctor (fever, sick baby, emergency)
+- reminder      : Asking to see vaccination schedule
+- shop          : Buying products (milk, diapers, biscuits, vitamins)
 
 Mother context: phase=${mother?.phase || 'unknown'}, region=${mother?.region || 'unknown'}
 
-User message: "${userInput}"
+IMPORTANT: If the user wants to go to a doctor, schedule a visit, or their baby/child is sick and needs medical attention → use "appointment".
 
-Respond with ONLY this JSON (no other text):
-{"intents":["intent1"],"entities":{"food":"if mentioned","symptom":"if mentioned","product":"if mentioned"},"confidence":"high|medium|low"}`;
+Respond with ONLY valid JSON, no markdown, no explanation:
+{"intents":["intent1"],"entities":{"symptom":"if any","when":"if mentioned"},"confidence":"high|medium|low"}`;
 
   try {
+    // Embed the system instruction directly in the user message for compatibility
+    const fullPrompt = SYSTEM + '\n\nUser message: "' + userInput.replace(/"/g, "'") + '"';
     const payload = JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: INTENT_PROMPT }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 150 },
+      contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 120 },
     });
 
-    const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+    const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     for (const model of models) {
       const apiUrl = `${GEMINI_ENDPOINT_BASE}${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
       try {
         const { status, body } = await httpsPost(apiUrl, payload);
-        if (status === 503 || status === 429 || status === 404) continue;
-        if (status !== 200) continue;
-
+        if (status === 503 || status === 429 || status === 404) { continue; }
+        if (status !== 200) {
+          // Silently skip — keyword fallback handles it
+          continue;
+        }
         const raw = body.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-        // Strip markdown fences if present
         const jsonStr = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
         const parsed = JSON.parse(jsonStr);
         return parsed;
-      } catch { continue; }
+      } catch (e) {
+        console.warn(`[IntentAnalyzer] ${model} error:`, e.message);
+        continue;
+      }
     }
   } catch (e) {
-    console.warn('[GuardianAgent] Intent analysis error:', e.message);
+    console.warn('[IntentAnalyzer] Fatal error:', e.message);
   }
   return null;
 }
@@ -96,11 +101,26 @@ const INTENTS = {
                 'jadwal vaksin', 'milestone saya', 'kunjungan saya', 'check bpjs'],
   // Full audit
   audit:       ['audit semua', 'cek semua ibu', 'laporan risiko', 'scan semua', 'audit all'],
-  // Doctor / emergency booking
-  appointment: ['pesan dokter', 'booking dokter', 'reservasi dokter', 'janji dokter',
-                'book doctor', 'book appointment', 'need doctor', 'butuh dokter',
-                'darurat', 'emergency', 'kejang', 'tidak sadar', 'sesak napas',
-                'pendarahan', 'demam tinggi', 'tidak mau menyusu'],
+  // Doctor / emergency booking — broad natural language coverage
+  appointment: [
+    // Explicit booking actions
+    'pesan dokter', 'booking dokter', 'reservasi dokter', 'janji dokter',
+    'jadwalkan dokter', 'jadwalkan ke dokter', 'jadwal dokter', 'buat janji',
+    'mau ke dokter', 'pergi ke dokter', 'ke dokter', 'ke bidan', 'ke puskesmas',
+    'ke rumah sakit', 'ke rs ', 'ke klinik', 'ke ugd', 'ke igd',
+    'book doctor', 'book appointment', 'schedule doctor', 'see a doctor',
+    'need doctor', 'butuh dokter', 'mau periksa', 'mau berobat',
+    'antar ke dokter', 'bawa ke dokter', 'bawa ke rs', 'bawa ke puskesmas',
+    // Emergency symptoms that require immediate booking
+    'darurat', 'emergency', 'gawat', 'segera ke dokter',
+    'kejang', 'tidak sadar', 'sesak napas', 'pendarahan',
+    'demam tinggi', 'tidak mau menyusu', 'tidak mau minum',
+    'sakit parah', 'sakit keras', 'kondisi memburuk', 'makin parah',
+    // General "sick + doctor" combinations
+    'sakit dan', 'sakit perlu', 'sakit harus',
+    'demam dan', 'demam perlu', 'demam harus',
+    'bayi sakit', 'anak sakit', 'ibu sakit',
+  ],
   // Vaccination reminder lookup
   reminder:    ['pengingat vaksin', 'reminder vaksin', 'jadwal vaksinasi saya',
                 'kapan vaksin berikutnya', 'ingatkan vaksin', 'show my vaccination',
@@ -206,15 +226,18 @@ const guardianAgent = {
       analyzeIntentWithGemini(userInput, motherData.mother),
     ]);
 
-    // Merge: Gemini intent takes priority when confidence is high/medium
+    // Merge: Gemini intent takes priority when confidence is high/medium.
+    // Action intents (appointment, shop, kit, reminder) always override 'general'.
     let intents = keywordIntents;
-    if (geminiIntentResult?.intents?.length > 0 &&
-        geminiIntentResult.confidence !== 'low' &&
-        geminiIntentResult.intents[0] !== 'general') {
-      // Use Gemini intents but keep any keyword intents that Gemini missed
-      const merged = new Set([...geminiIntentResult.intents, ...keywordIntents]);
-      intents = [...merged].filter(i => i !== 'general' || merged.size === 1);
-      if (intents.length === 0) intents = ['general'];
+    if (geminiIntentResult?.intents?.length > 0 && geminiIntentResult.confidence !== 'low') {
+      const geminiActionIntents = geminiIntentResult.intents.filter(i => i !== 'general');
+      if (geminiActionIntents.length > 0) {
+        // Gemini found action intents — merge with keyword intents
+        const merged = new Set([...geminiActionIntents, ...keywordIntents.filter(i => i !== 'general')]);
+        intents = [...merged];
+        if (intents.length === 0) intents = ['general'];
+      }
+      // If Gemini only returned 'general' but keywords found something, keep keywords
     }
 
     const symptoms = detectSymptoms(userInput);
